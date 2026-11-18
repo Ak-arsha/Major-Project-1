@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   Check,
@@ -10,6 +10,8 @@ import {
   ChevronDown,
   X,
   LoaderCircle,
+  RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import PageHeader from "../components/common/PageHeader";
@@ -23,6 +25,7 @@ import {
   answerInsuranceQuestion,
   fetchAllInsuranceDocuments,
   fetchPolicyFinderPolicies,
+  filterPolicyDataset,
   uploadInsurancePDF,
 } from "../services/insuranceService";
 
@@ -55,6 +58,21 @@ export default function Insurance() {
     initial_waiting: "",
     ped_waiting: "",
   });
+  const [sortBy, setSortBy] = useState("relevance");
+
+  const handleResetFilters = () => {
+    setFinderFilters({
+      min_sum_insured: "",
+      max_sum_insured: "",
+      copay: "",
+      deductible: "",
+      initial_waiting: "",
+      ped_waiting: "",
+    });
+    setFinderSearch("");
+    setFinderCategory("all");
+    setSortBy("relevance");
+  };
 
   const [filterOptions, setFilterOptions] = useState({});
   // Selected policy details
@@ -261,19 +279,19 @@ export default function Insurance() {
     (doc) => doc.filename === selectedDocument,
   );
 
-  const filteredFinderPolicies = finderPolicies.filter((policy) => {
-    const search = finderSearch.toLowerCase();
-
-    const matchesSearch =
-      policy.name?.toLowerCase().includes(search) ||
-      policy.insurer?.toLowerCase().includes(search) ||
-      policy.uin?.toLowerCase().includes(search);
-
-    const matchesCategory =
-      finderCategory === "all" || policy.category === finderCategory;
-
-    return matchesSearch && matchesCategory;
-  });
+  const filteredFinderPolicies = useMemo(() => {
+    return filterPolicyDataset(finderPolicies, {
+      category: finderCategory,
+      search: finderSearch,
+      min_sum_insured: finderFilters.min_sum_insured,
+      max_sum_insured: finderFilters.max_sum_insured,
+      copay: finderFilters.copay,
+      deductible: finderFilters.deductible,
+      initial_waiting: finderFilters.initial_waiting,
+      ped_waiting: finderFilters.ped_waiting,
+      sortBy,
+    });
+  }, [finderPolicies, finderCategory, finderSearch, finderFilters, sortBy]);
 
   return (
     <div className="page">
@@ -769,18 +787,33 @@ export default function Insurance() {
                   </select>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  onClick={fetchFinderPolicies}
-                  disabled={finderLoading}
-                >
-                  Apply Filters
-                </button>
-                {finderLoading && <p className="muted">Loading policies...</p>}
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={fetchFinderPolicies}
+                    disabled={finderLoading}
+                  >
+                    <SlidersHorizontal size={15} style={{ marginRight: '0.35rem' }} />
+                    Apply Filters
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={handleResetFilters}
+                    disabled={finderLoading}
+                    title="Reset all filters to default"
+                  >
+                    <RotateCcw size={15} style={{ marginRight: '0.35rem' }} />
+                    Reset Filters
+                  </button>
+                </div>
+
+                {finderLoading && <p className="muted" style={{ marginTop: '0.75rem' }}>Loading policies...</p>}
 
                 {finderError && (
-                  <div className="error-message" role="alert">
+                  <div className="error-message" role="alert" style={{ marginTop: '0.75rem' }}>
                     {finderError}
                     <button
                       type="button"
@@ -793,9 +826,50 @@ export default function Insurance() {
                 )}
 
                 {!finderLoading && !finderError && (
-                  <p className="muted">
-                    Showing {filteredFinderPolicies.length} policies
-                  </p>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem',
+                      marginTop: '1.25rem',
+                      marginBottom: '0.75rem',
+                      padding: '0.65rem 0.85rem',
+                      background: '#f8fafc',
+                      borderRadius: 'var(--r-md)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <p className="muted" style={{ margin: 0, fontSize: '0.875rem' }}>
+                      Showing <strong>{filteredFinderPolicies.length}</strong> of {finderPolicies.length} policies
+                      {(finderFilters.copay ||
+                        finderFilters.deductible ||
+                        finderFilters.initial_waiting ||
+                        finderFilters.ped_waiting ||
+                        finderFilters.min_sum_insured ||
+                        finderFilters.max_sum_insured ||
+                        finderCategory !== 'all') && ' (filters applied)'}
+                    </p>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <label htmlFor="finder-sort" style={{ fontSize: '0.825rem', color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+                        Sort by:
+                      </label>
+                      <select
+                        id="finder-sort"
+                        className="field"
+                        style={{ padding: '0.3rem 0.65rem', fontSize: '0.825rem', width: 'auto' }}
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value)}
+                      >
+                        <option value="relevance">Relevance / Best Match</option>
+                        <option value="sum_desc">Sum Insured: High to Low</option>
+                        <option value="sum_asc">Sum Insured: Low to High</option>
+                        <option value="name_asc">Policy Name: A to Z</option>
+                      </select>
+                    </div>
+                  </div>
                 )}
 
                 <div className="card-grid card-grid--3">
@@ -814,6 +888,30 @@ export default function Insurance() {
                       <p>
                         <strong>UIN:</strong> {policy.uin}
                       </p>
+
+                      {policy.filter_values && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', margin: '0.4rem 0 0.85rem' }}>
+                          {policy.filter_values.sum_insured_options?.[0] && (
+                            <span style={{ fontSize: '0.72rem', background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
+                              {policy.filter_values.sum_insured_options[0].length > 30
+                                ? policy.filter_values.sum_insured_options[0].slice(0, 28) + '…'
+                                : policy.filter_values.sum_insured_options[0]}
+                            </span>
+                          )}
+                          {policy.filter_values.copay?.[0] && (
+                            <span style={{ fontSize: '0.72rem', background: '#f0fdf4', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
+                              Co-pay: {policy.filter_values.copay[0].length > 22
+                                ? policy.filter_values.copay[0].slice(0, 20) + '…'
+                                : policy.filter_values.copay[0]}
+                            </span>
+                          )}
+                          {policy.filter_values.ped_waiting?.[0] && (
+                            <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
+                              PED: {policy.filter_values.ped_waiting[0]}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         type="button"

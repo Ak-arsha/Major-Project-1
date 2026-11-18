@@ -389,6 +389,220 @@ ${explanation}
   };
 }
 
+const multipliers = {
+  crore: 10000000,
+  crores: 10000000,
+  cr: 10000000,
+  lakh: 100000,
+  lakhs: 100000,
+  lac: 100000,
+  lacs: 100000,
+  thousand: 1000,
+  thousands: 1000,
+  k: 1000,
+};
+
+export function parseInsuranceAmounts(value) {
+  if (!value) return [];
+  const text = String(value).toLowerCase().replace(/,/g, '');
+  const pattern = /(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*(crores?|cr|lakhs?|lacs?|lac|thousands?|k)?/g;
+  const amounts = [];
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const number = parseFloat(match[1]);
+    const unit = match[2];
+    if (unit && multipliers[unit]) {
+      amounts.push(number * multipliers[unit]);
+    } else if (/(?:₹|rs\.?|inr)/.test(match[0])) {
+      amounts.push(number);
+    }
+  }
+  return amounts;
+}
+
+export function matchesSumInsured(values, minAmount, maxAmount) {
+  if ((minAmount == null || minAmount === '') && (maxAmount == null || maxAmount === '')) {
+    return true;
+  }
+  const minLimit = minAmount != null && minAmount !== '' ? parseFloat(minAmount) : 0;
+  const maxLimit = maxAmount != null && maxAmount !== '' ? parseFloat(maxAmount) : Infinity;
+
+  const policyAmounts = [];
+  for (const v of values || []) {
+    policyAmounts.push(...parseInsuranceAmounts(v));
+  }
+  if (policyAmounts.length === 0) return true;
+
+  return policyAmounts.some((amt) => amt >= minLimit && amt <= maxLimit);
+}
+
+export function matchesCopayFilter(values, selected) {
+  if (!selected) return true;
+  const sel = String(selected).toLowerCase();
+  for (const value of values || []) {
+    const text = String(value).toLowerCase();
+    const percentages = [];
+    const pRegex = /(\d+(?:\.\d+)?)\s*%/g;
+    let pMatch;
+    while ((pMatch = pRegex.exec(text)) !== null) {
+      percentages.push(parseFloat(pMatch[1]));
+    }
+
+    const isOptional =
+      text.includes('unless opted') ||
+      text.includes('voluntary') ||
+      text.includes('optional');
+
+    const isConditional = [
+      'except', 'zone', 'higher', 'depending', 'may apply', 'outside',
+      'specific', 'variant', 'if treated', 'late intimation', 'not for accidents',
+    ].some((t) => text.includes(t));
+
+    if (sel === 'no_copay') {
+      if (
+        percentages.length === 0 &&
+        !isOptional &&
+        !isConditional &&
+        (text.trim() === 'none' || text.includes('no co-payment') || text.includes('no copay'))
+      ) {
+        return true;
+      }
+    } else if (sel === 'optional') {
+      if (isOptional) return true;
+    } else if (sel === '5' || sel === '10' || sel === '20') {
+      const num = parseFloat(sel);
+      if (percentages.includes(num)) return true;
+    } else if (sel === 'conditional') {
+      if (isConditional || percentages.some((p) => ![5, 10, 20].includes(p))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function matchesDeductibleFilter(values, selected) {
+  if (!selected) return true;
+  const sel = String(selected).toLowerCase().trim();
+  for (const value of values || []) {
+    const text = String(value).toLowerCase().trim();
+    const isNone = text === 'none' || text.startsWith('none (na)');
+    const isOptional =
+      text.includes('unless opted') ||
+      text.includes('voluntary') ||
+      text.includes('optional');
+
+    if (sel === 'no_deductible' && isNone) return true;
+    if (sel === 'optional' && isOptional) return true;
+    if (sel === 'has_deductible' && !isNone && !isOptional) return true;
+  }
+  return false;
+}
+
+export function matchesWaitingFilter(values, selected) {
+  if (!selected) return true;
+  const sel = String(selected).toLowerCase().trim();
+  for (const value of values || []) {
+    const val = String(value).toLowerCase().trim();
+    if (val.includes(sel) || sel.includes(val)) return true;
+  }
+  return false;
+}
+
+export function filterPolicyDataset(policies, params = {}) {
+  let results = [...(policies || [])];
+
+  // 1. Category Filter
+  if (params.category && params.category !== 'all') {
+    results = results.filter((p) => p.category === params.category);
+  }
+
+  // 2. Search Text
+  if (params.search && params.search.trim()) {
+    const s = params.search.toLowerCase().trim();
+    results = results.filter(
+      (p) =>
+        (p.name && p.name.toLowerCase().includes(s)) ||
+        (p.insurer && p.insurer.toLowerCase().includes(s)) ||
+        (p.uin && p.uin.toLowerCase().includes(s)) ||
+        (p.summary && p.summary.toLowerCase().includes(s))
+    );
+  }
+
+  // 3. Sum Insured Range
+  if (
+    (params.min_sum_insured != null && params.min_sum_insured !== '') ||
+    (params.max_sum_insured != null && params.max_sum_insured !== '')
+  ) {
+    results = results.filter((p) => {
+      const vals = p.filter_values?.sum_insured_options || [];
+      return matchesSumInsured(vals, params.min_sum_insured, params.max_sum_insured);
+    });
+  }
+
+  // 4. Co-pay Filter
+  if (params.copay) {
+    results = results.filter((p) => {
+      const vals = p.filter_values?.copay || [];
+      return matchesCopayFilter(vals, params.copay);
+    });
+  }
+
+  // 5. Deductible Filter
+  if (params.deductible) {
+    results = results.filter((p) => {
+      const vals = p.filter_values?.deductible || [];
+      return matchesDeductibleFilter(vals, params.deductible);
+    });
+  }
+
+  // 6. Initial Waiting Period Filter
+  if (params.initial_waiting) {
+    results = results.filter((p) => {
+      const vals = p.filter_values?.initial_waiting || [];
+      return matchesWaitingFilter(vals, params.initial_waiting);
+    });
+  }
+
+  // 7. PED Waiting Period Filter
+  if (params.ped_waiting) {
+    results = results.filter((p) => {
+      const vals = p.filter_values?.ped_waiting || [];
+      return matchesWaitingFilter(vals, params.ped_waiting);
+    });
+  }
+
+  // 8. Sorting
+  const sortBy = params.sortBy || 'relevance';
+  if (sortBy === 'sum_desc') {
+    results.sort((a, b) => {
+      const aMax = Math.max(0, ...parseInsuranceAmounts(a.filter_values?.sum_insured_options));
+      const bMax = Math.max(0, ...parseInsuranceAmounts(b.filter_values?.sum_insured_options));
+      return bMax - aMax;
+    });
+  } else if (sortBy === 'sum_asc') {
+    results.sort((a, b) => {
+      const aMin = Math.min(Infinity, ...parseInsuranceAmounts(a.filter_values?.sum_insured_options));
+      const bMin = Math.min(Infinity, ...parseInsuranceAmounts(b.filter_values?.sum_insured_options));
+      return (aMin === Infinity ? 0 : aMin) - (bMin === Infinity ? 0 : bMin);
+    });
+  } else if (sortBy === 'name_asc') {
+    results.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  } else {
+    // Relevance: if search is present, sort exact prefix matches first
+    if (params.search && params.search.trim()) {
+      const s = params.search.toLowerCase().trim();
+      results.sort((a, b) => {
+        const aStarts = (a.name || '').toLowerCase().startsWith(s) ? -1 : 0;
+        const bStarts = (b.name || '').toLowerCase().startsWith(s) ? -1 : 0;
+        return aStarts - bStarts;
+      });
+    }
+  }
+
+  return results;
+}
+
 // Fetch Policy Finder cached policies with full fallback to 31 verified policies
 export async function fetchPolicyFinderPolicies(params = {}) {
   try {
@@ -405,29 +619,20 @@ export async function fetchPolicyFinderPolicies(params = {}) {
     const res = await fetch(`${API_BASE_URL}/api/policy-finder/cached-policies?${searchParams.toString()}`);
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.results) && data.results.length > 0) {
-        return data;
+      if (data && Array.isArray(data.results)) {
+        return {
+          total: data.results.length,
+          results: filterPolicyDataset(data.results, params),
+          filter_options: data.filter_options || cachedPoliciesData.filter_options || {},
+        };
       }
     }
   } catch (err) {
     console.info('Backend policy-finder endpoint unavailable, using cached policy dataset.');
   }
 
-  // Filter client-side from cachedPoliciesData
-  let results = cachedPoliciesData.results || [];
-  if (params.category && params.category !== 'all') {
-    results = results.filter((p) => p.category === params.category);
-  }
-  if (params.search && params.search.trim()) {
-    const s = params.search.toLowerCase().trim();
-    results = results.filter(
-      (p) =>
-        (p.name && p.name.toLowerCase().includes(s)) ||
-        (p.insurer && p.insurer.toLowerCase().includes(s)) ||
-        (p.uin && p.uin.toLowerCase().includes(s)) ||
-        (p.summary && p.summary.toLowerCase().includes(s))
-    );
-  }
+  // Filter client-side from cachedPoliciesData with full filter and sorting engine
+  const results = filterPolicyDataset(cachedPoliciesData.results || [], params);
 
   return {
     total: results.length,
