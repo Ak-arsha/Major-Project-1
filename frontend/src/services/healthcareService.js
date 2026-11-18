@@ -174,9 +174,18 @@ export function isDoctorDeleted(doc) {
   if (!doc) return true;
   const name = String(doc.doctor_name || doc.name || '').toLowerCase().trim();
   const id = String(doc.doctor_id || '').toLowerCase().trim();
-  if (name.includes('akarsha agarwal') || (name.includes('akarsha') && name.includes('agarwal'))) {
+  const spec = String(doc.doctor_type || doc.specialization || '').toLowerCase();
+  const hosp = String(doc.hospital_name || doc.hospital || '').toLowerCase();
+  const fee = Number(doc.fees || doc.fee || 0);
+
+  // Filter the legacy duplicate entries specifically (Gynecologist, 1000 fee, Care Plus)
+  if (
+    name.includes('akarsha') && name.includes('agarwal') &&
+    (spec.includes('gynec') || hosp.includes('care plus') || fee === 1000)
+  ) {
     return true;
   }
+
   const deleted = getDeletedDoctorIds();
   const cleanName = name.replace(/^dr\.?\s*/i, '').trim();
   return deleted.includes(id) || deleted.includes(cleanName) || deleted.includes(name);
@@ -450,6 +459,16 @@ export async function saveCustomDoctor(doc) {
     const docEmail = doc.email || `doctor_${Date.now()}@healthnavigator.ai`;
     let docId = doc.doctor_id || `doc-${Date.now()}`;
     let hospId = doc.hospital_id || doc.hospitalId || `hosp-${cleanHosp.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+    // Ensure this newly registered doctor is unflagged from deleted IDs
+    try {
+      const deleted = getDeletedDoctorIds();
+      const cleanName = docName.toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+      const updatedDeleted = deleted.filter(
+        (x) => x !== String(docId).toLowerCase() && x !== cleanName && x !== docName.toLowerCase()
+      );
+      localStorage.setItem('hn_deleted_doctor_ids', JSON.stringify(updatedDeleted));
+    } catch {}
 
     // 1. Try backend POST
     try {

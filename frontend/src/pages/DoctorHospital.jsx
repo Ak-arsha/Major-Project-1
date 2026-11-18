@@ -769,6 +769,7 @@ export default function DoctorHospital() {
             </div>
 
             <form
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
               onSubmit={async (e) => {
                 e.preventDefault();
                 setAddDocError('');
@@ -838,7 +839,7 @@ export default function DoctorHospital() {
                 }
               }}
             >
-              <div className="dr-modal__body">
+              <div className="dr-modal__body" style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
                 {addDocSuccess && (
                   <p style={{ color: '#047857', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#ecfdf5', borderRadius: 'var(--r-md)', border: '1px solid #a7f3d0', marginBottom: '1rem' }}>
                     ✓ {addDocSuccess}
@@ -1046,7 +1047,7 @@ export default function DoctorHospital() {
                 </div>
               </div>
 
-              <div className="dr-modal__foot">
+              <div className="dr-modal__foot" style={{ flexShrink: 0, position: 'sticky', bottom: 0, zIndex: 10, background: '#f8fafc' }}>
                 <button
                   type="button"
                   className="btn btn--ghost"
@@ -1087,6 +1088,7 @@ export default function DoctorHospital() {
             </div>
 
             <form
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}
               onSubmit={async (e) => {
                 e.preventDefault();
                 setAddHospError('');
@@ -1143,7 +1145,7 @@ export default function DoctorHospital() {
                 }
               }}
             >
-              <div className="dr-modal__body">
+              <div className="dr-modal__body" style={{ overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
                 {addHospSuccess && (
                   <p style={{ color: '#047857', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#ecfdf5', borderRadius: 'var(--r-md)', border: '1px solid #a7f3d0', marginBottom: '1rem' }}>
                     ✓ {addHospSuccess}
@@ -1292,7 +1294,7 @@ export default function DoctorHospital() {
                 </div>
               </div>
 
-              <div className="dr-modal__foot">
+              <div className="dr-modal__foot" style={{ flexShrink: 0, position: 'sticky', bottom: 0, zIndex: 10, background: '#f8fafc' }}>
                 <button
                   type="button"
                   className="btn btn--ghost"

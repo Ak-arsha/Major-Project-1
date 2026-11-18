@@ -98,32 +98,44 @@ select.field { appearance: none; background-image: linear-gradient(45deg, transp
 .dr-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(15, 23, 42, 0.65);
   backdrop-filter: blur(4px);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  z-index: 1000;
-  padding: 16px;
+  z-index: 1050;
+  padding: 24px 16px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dr-modal {
   background: #ffffff;
   border-radius: var(--r-lg, 16px);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
   width: 100%;
   max-width: 580px;
-  max-height: 90vh;
+  max-height: min(92vh, 820px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid var(--line);
+  margin: auto 0;
+  position: relative;
 }
 
 .dr-modal--wide {
   max-width: 720px;
+}
+
+.dr-modal form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 @keyframes modalFadeIn {
@@ -138,6 +150,7 @@ select.field { appearance: none; background-image: linear-gradient(45deg, transp
   padding: 18px 24px;
   border-bottom: 1px solid var(--line);
   background: #f8fafc;
+  flex-shrink: 0;
 }
 
 .dr-modal__head h2 {
@@ -174,7 +187,10 @@ select.field { appearance: none; background-image: linear-gradient(45deg, transp
 .dr-modal__body {
   padding: 22px 24px;
   overflow-y: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dr-modal__foot {
@@ -185,12 +201,38 @@ select.field { appearance: none; background-image: linear-gradient(45deg, transp
   padding: 16px 24px;
   border-top: 1px solid var(--line);
   background: #f8fafc;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
 .dr-form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .dr-overlay {
+    padding: 12px 8px;
+  }
+  .dr-modal {
+    max-height: 96vh;
+    border-radius: var(--r-md, 12px);
+  }
+  .dr-modal__head,
+  .dr-modal__body,
+  .dr-modal__foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .dr-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .dr-form-grid > label[style*="span 2"] {
+    grid-column: span 1 !important;
+  }
 }
 
 @media (max-width: 640px) {
