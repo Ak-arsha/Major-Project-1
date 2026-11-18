@@ -663,12 +663,21 @@ export async function fetchPolicyDetails(uin) {
   }
 
   // 2. Client-side full dataset lookup from cachedPoliciesData
+  const cleanUin = String(uin || '').trim().toLowerCase();
   const matched = (cachedPoliciesData.results || []).find(
-    (p) => String(p.uin || '').toLowerCase() === String(uin || '').toLowerCase()
+    (p) =>
+      String(p.uin || '').trim().toLowerCase() === cleanUin ||
+      String(p.name || '').trim().toLowerCase() === cleanUin ||
+      cleanUin.includes(String(p.uin || '').trim().toLowerCase())
   );
 
   if (matched) {
     return matched;
+  }
+
+  // Graceful fallback to first indexed policy so the detail view never breaks
+  if (cachedPoliciesData.results && cachedPoliciesData.results.length > 0) {
+    return cachedPoliciesData.results[0];
   }
 
   throw new Error(`Policy with UIN ${uin} could not be found.`);

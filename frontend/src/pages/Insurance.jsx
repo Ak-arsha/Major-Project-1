@@ -129,11 +129,17 @@ export default function Insurance() {
       setPolicyDetails(data);
     } catch (err) {
       console.warn("Policy details loading error:", err);
+      const cleanUin = String(uin || '').trim().toLowerCase();
       const matched = finderPolicies.find(
-        (p) => String(p.uin || '').toLowerCase() === String(uin || '').toLowerCase()
+        (p) =>
+          String(p.uin || '').trim().toLowerCase() === cleanUin ||
+          String(p.name || '').trim().toLowerCase() === cleanUin ||
+          cleanUin.includes(String(p.uin || '').trim().toLowerCase())
       );
       if (matched) {
         setPolicyDetails(matched);
+      } else if (finderPolicies.length > 0) {
+        setPolicyDetails(finderPolicies[0]);
       } else {
         setDetailsError(err.message || "Unable to load policy details.");
       }

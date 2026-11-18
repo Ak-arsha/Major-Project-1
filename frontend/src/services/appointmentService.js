@@ -482,15 +482,35 @@ export async function getAppointments(filters = {}) {
 
   const rawUserBookings = getStoredUserBookings();
 
-  // Filter bookings strictly for the current patient:
-  // If demo Alex Sharma, include baseline bookings plus any bookings created under Alex's email/name.
-  // If custom registered patient, ONLY include bookings made with their email or name!
+  // Strict patient-level isolation:
+  // An appointment ONLY belongs to the active user if:
+  // 1. If user has a name, and booking has a name, names MUST match.
+  // 2. If user has an email, and booking has an email, emails MUST match.
+  // 3. Under NO circumstances does Alex Sharma or any other user see bookings for "Aadi Jain", "kui kui", etc.
   const userBookings = rawUserBookings.filter((b) => {
     const bEmail = (b.patient_email || '').trim().toLowerCase();
     const bName = (b.patient_name || '').trim().toLowerCase();
-    if (cleanEmail && bEmail) return bEmail === cleanEmail;
-    if (cleanName && bName) return bName === cleanName;
-    return isDemoAlex;
+
+    // If booking has a specific patient name and it does not match active user, reject!
+    if (cleanName && bName && cleanName !== bName) {
+      return false;
+    }
+    // If booking has a specific email and it does not match active user, reject!
+    if (cleanEmail && bEmail && cleanEmail !== bEmail) {
+      return false;
+    }
+
+    // Match if name matches
+    if (cleanName && bName && cleanName === bName) return true;
+    // Match if email matches
+    if (cleanEmail && bEmail && cleanEmail === bEmail) return true;
+
+    // If both name and email on the booking are blank/unspecified:
+    if (!bEmail && !bName) {
+      return isDemoAlex;
+    }
+
+    return false;
   });
 
   // Try fetching live backend appointments
@@ -509,9 +529,11 @@ export async function getAppointments(filters = {}) {
       apiAppointments = res.appointments.filter((a) => {
         const aEmail = (a.patient_email || '').trim().toLowerCase();
         const aName = (a.patient_name || '').trim().toLowerCase();
-        if (cleanEmail && aEmail) return aEmail === cleanEmail;
-        if (cleanName && aName) return aName === cleanName;
-        return isDemoAlex && (aName === 'alex sharma' || aEmail === 'patient@healthnavigator.ai');
+        if (cleanName && aName && cleanName !== aName) return false;
+        if (cleanEmail && aEmail && cleanEmail !== aEmail) return false;
+        if (cleanName && aName && cleanName === aName) return true;
+        if (cleanEmail && aEmail && cleanEmail === aEmail) return true;
+        return false;
       });
     }
   } catch (err) {
