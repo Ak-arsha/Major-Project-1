@@ -156,32 +156,179 @@ export function getCustomDoctors() {
   return list;
 }
 
-export function saveCustomDoctor(doc) {
+export function getCustomHospitals() {
+  const list = [];
+  const seenIds = new Set();
+
+  try {
+    const raw = localStorage.getItem('hn_custom_hospitals');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((h) => {
+          if (h && (h.hospital_id || h.hospital_name) && !seenIds.has(String(h.hospital_id || h.hospital_name))) {
+            seenIds.add(String(h.hospital_id || h.hospital_name));
+            list.push(h);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to parse custom hospitals:', err);
+  }
+
+  return list;
+}
+
+export async function saveCustomHospital(hosp) {
+  try {
+    const current = getCustomHospitals();
+    const cleanName = (hosp.hospital_name || hosp.name || '').trim();
+    const cleanCity = (hosp.city || 'Delhi').trim();
+    const cleanLoc = (hosp.location || hosp.city || 'City Center').trim();
+    let hospId = hosp.hospital_id || `hosp-${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
+
+    // Try backend persistence
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/hospitals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hospital_name: cleanName,
+          city: cleanCity,
+          location: cleanLoc,
+          address: hosp.address || `${cleanName}, ${cleanLoc}, ${cleanCity}`,
+          phone: hosp.phone || '+91 11 2651 5050',
+          emergency_phone: hosp.emergency_phone || hosp.emergencyPhone || '+91 11 2651 5055',
+          type: hosp.type || 'Multi Speciality Hospital',
+          bed_count: hosp.bed_count ? Number(hosp.bed_count) : 150,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.hospital_id) {
+          hospId = data.hospital_id;
+        }
+      }
+    } catch (err) {
+      console.info('Backend hospital creation unavailable, saved in local persistent database.');
+    }
+
+    const formatted = {
+      hospital_id: hospId,
+      hospital_name: cleanName,
+      city: cleanCity,
+      location: cleanLoc,
+      address: hosp.address || `${cleanName}, ${cleanLoc}, ${cleanCity}`,
+      phone: hosp.phone || '+91 11 2651 5050',
+      emergency_phone: hosp.emergency_phone || hosp.emergencyPhone || '+91 11 2651 5055',
+      type: hosp.type || 'Multi Speciality Hospital',
+      doctor_count: hosp.doctor_count || 0,
+      bed_count: hosp.bed_count ? Number(hosp.bed_count) : 150,
+      isCustom: true,
+    };
+
+    const filtered = current.filter(
+      (h) => String(h.hospital_id) !== String(hospId) && h.hospital_name?.toLowerCase() !== cleanName.toLowerCase()
+    );
+    const updated = [formatted, ...filtered];
+    localStorage.setItem('hn_custom_hospitals', JSON.stringify(updated));
+
+    hospitalsCache = null;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hn_hospitals_updated', { detail: formatted }));
+    }
+
+    return formatted;
+  } catch (err) {
+    console.warn('Failed to save custom hospital:', err);
+    return hosp;
+  }
+}
+
+export async function saveCustomDoctor(doc) {
   try {
     const current = getCustomDoctors();
-    const docId = doc.doctor_id || `doc-${doc.email ? doc.email.replace(/[@.]/g, '_') : Date.now()}`;
+    const rawName = (doc.doctor_name || doc.name || '').trim();
+    const docName = rawName.toLowerCase().startsWith('dr.') || rawName.toLowerCase().startsWith('dr ')
+      ? rawName
+      : `Dr. ${rawName}`;
+    const cleanSpec = (doc.doctor_type || doc.specialization || 'General Medicine').trim();
+    const cleanCity = (doc.city || doc.location || 'Delhi').trim();
+    const cleanLoc = (doc.location || doc.city || 'City Center').trim();
+    const cleanHosp = (doc.hospital_name || doc.hospital || 'Metro Care Super Specialty Clinic').trim();
+    const docFee = doc.fees != null ? Number(doc.fees) : doc.fee != null ? Number(doc.fee) : 800;
+    const docExp = doc.experience_years != null ? Number(doc.experience_years) : doc.experienceYears != null ? Number(doc.experienceYears) : 10;
+    const docPhone = doc.phone || '+91 98765 43210';
+    const docEmail = doc.email || `doctor_${Date.now()}@healthnavigator.ai`;
+    let docId = doc.doctor_id || `doc-${Date.now()}`;
+    let hospId = doc.hospital_id || doc.hospitalId || `hosp-${cleanHosp.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+    // 1. Try backend POST
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/doctors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doctor_name: docName,
+          doctor_type: cleanSpec,
+          experience_years: docExp,
+          fees: docFee,
+          city: cleanCity,
+          location: cleanLoc,
+          hospital_name: cleanHosp,
+          hospital_id: typeof hospId === 'number' ? hospId : null,
+          phone: docPhone,
+          email: docEmail,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.doctor_id) {
+          docId = data.doctor_id;
+          if (data.hospital_id) hospId = data.hospital_id;
+        }
+      }
+    } catch (err) {
+      console.info('Backend doctor creation unavailable, saved in local persistent database.');
+    }
+
     const formatted = {
       doctor_id: docId,
-      doctor_name: doc.doctor_name || (doc.name?.startsWith('Dr.') ? doc.name : `Dr. ${doc.name || 'Specialist'}`),
-      doctor_type: doc.doctor_type || doc.specialization || 'General Medicine',
-      specialization: doc.specialization || doc.doctor_type || 'General Medicine',
-      experience_years: doc.experience_years || doc.experienceYears || 10,
-      fees: doc.fees != null ? Number(doc.fees) : doc.fee != null ? Number(doc.fee) : 750,
-      city: doc.city || doc.location || 'Delhi',
-      location: doc.location || doc.city || 'Connaught Place',
-      hospital_id: doc.hospital_id || doc.hospitalId || `hosp-${(doc.hospital_name || doc.hospital || 'Metro Care').toLowerCase().replace(/\s+/g, '-')}`,
-      hospital_name: doc.hospital_name || doc.hospital || 'Metro Care Super Specialty Clinic',
-      phone: doc.phone || '+91 98765 43210',
-      email: doc.email || '',
+      composite_doctor_id: doc.composite_doctor_id || `${docName.toLowerCase()}_${cleanSpec.toLowerCase()}_${cleanLoc.toLowerCase()}`,
+      doctor_name: docName,
+      doctor_type: cleanSpec,
+      specialization: cleanSpec,
+      experience_years: docExp,
+      fees: docFee,
+      city: cleanCity,
+      location: cleanLoc,
+      hospital_id: hospId,
+      hospital_name: cleanHosp,
+      phone: docPhone,
+      email: docEmail,
       rating: doc.rating || 4.9,
-      reviews: doc.reviews || 64,
+      reviews: doc.reviews || 36,
       availableToday: true,
       isRegistered: true,
     };
 
-    const filtered = current.filter((d) => String(d.doctor_id) !== String(docId) && (!doc.email || d.email !== doc.email));
+    const filtered = current.filter((d) => String(d.doctor_id) !== String(docId) && (!docEmail || d.email !== docEmail));
     const updated = [formatted, ...filtered];
     localStorage.setItem('hn_custom_doctors', JSON.stringify(updated));
+
+    // Also register this hospital in custom hospitals
+    saveCustomHospital({
+      hospital_id: hospId,
+      hospital_name: cleanHosp,
+      city: cleanCity,
+      location: cleanLoc,
+      address: `${cleanHosp}, ${cleanLoc}, ${cleanCity}`,
+      phone: docPhone,
+    }).catch(() => {});
+
+    doctorsCache = null;
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('hn_doctors_updated', { detail: formatted }));
@@ -289,6 +436,15 @@ export async function getHospitals(filters = {}) {
     merged.push(VERIFIED_TESTING_HOSPITAL);
     seenHospIds.add(String(VERIFIED_TESTING_HOSPITAL.hospital_id));
   }
+
+  // Add custom registered hospitals
+  const customHosps = getCustomHospitals();
+  customHosps.forEach((hosp) => {
+    if (!seenHospIds.has(String(hosp.hospital_id)) && hospitalMatchesFilter(hosp, filters)) {
+      merged.push(hosp);
+      seenHospIds.add(String(hosp.hospital_id));
+    }
+  });
 
   // Add hospitals from custom registered doctors
   const customDocs = getCustomDoctors();

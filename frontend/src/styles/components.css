@@ -93,3 +93,108 @@ select.field { appearance: none; background-image: linear-gradient(45deg, transp
 .table th { text-align: left; font-weight: 600; color: var(--ink-faint); font-size: 0.85rem; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .table td { padding: 13px 12px; border-bottom: 1px solid var(--line); }
 .table tr:last-child td { border-bottom: 0; }
+
+/* Modal & Overlay System */
+.dr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.dr-modal {
+  background: #ffffff;
+  border-radius: var(--r-lg, 16px);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid var(--line);
+}
+
+.dr-modal--wide {
+  max-width: 720px;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.dr-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.dr-modal__head h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--navy-800);
+  margin: 0;
+}
+
+.dr-modal__head p {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin: 3px 0 0;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.icon-btn:hover {
+  background: #e2e8f0;
+  color: var(--ink);
+}
+
+.dr-modal__body {
+  padding: 22px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dr-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.dr-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .dr-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -18,7 +18,7 @@ import {
 
 import PageHeader from '../components/common/PageHeader';
 import { useAuth } from '../context/AuthContext';
-import { getDoctors, getHospitals, saveCustomDoctor } from '../services/healthcareService';
+import { getDoctors, getHospitals, saveCustomDoctor, saveCustomHospital } from '../services/healthcareService';
 import {
   clearAllSearchHistory,
   loadSearchHistory,
@@ -88,15 +88,33 @@ export default function DoctorHospital() {
   const [error, setError] = useState('');
 
   // Add doctor modal state
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddDoctorModal, setShowAddDoctorModal] = useState(false);
   const [addDocName, setAddDocName] = useState('');
   const [addDocSpec, setAddDocSpec] = useState('General Medicine');
-  const [addDocHosp, setAddDocHosp] = useState('Apollo Hospital');
-  const [addDocCity, setAddDocCity] = useState('Delhi');
+  const [addDocExp, setAddDocExp] = useState('10');
+  const [addDocHosp, setAddDocHosp] = useState('');
+  const [addDocCity, setAddDocCity] = useState('');
+  const [addDocLoc, setAddDocLoc] = useState('');
   const [addDocFee, setAddDocFee] = useState('800');
   const [addDocPhone, setAddDocPhone] = useState('+91 98765 43210');
+  const [addDocEmail, setAddDocEmail] = useState('');
   const [addDocSubmitting, setAddDocSubmitting] = useState(false);
   const [addDocSuccess, setAddDocSuccess] = useState('');
+  const [addDocError, setAddDocError] = useState('');
+
+  // Add hospital modal state
+  const [showAddHospitalModal, setShowAddHospitalModal] = useState(false);
+  const [addHospName, setAddHospName] = useState('');
+  const [addHospType, setAddHospType] = useState('Multi Speciality Hospital');
+  const [addHospCity, setAddHospCity] = useState('');
+  const [addHospLoc, setAddHospLoc] = useState('');
+  const [addHospAddress, setAddHospAddress] = useState('');
+  const [addHospPhone, setAddHospPhone] = useState('+91 11 2651 5050');
+  const [addHospEmergency, setAddHospEmergency] = useState('+91 11 2651 5055');
+  const [addHospBeds, setAddHospBeds] = useState('150');
+  const [addHospSubmitting, setAddHospSubmitting] = useState(false);
+  const [addHospSuccess, setAddHospSuccess] = useState('');
+  const [addHospError, setAddHospError] = useState('');
 
   // Fetch actual doctors and hospitals from FastAPI & persistent registry
   useEffect(() => {
@@ -133,10 +151,12 @@ export default function DoctorHospital() {
       loadHealthcareData();
     };
     window.addEventListener('hn_doctors_updated', handleUpdate);
+    window.addEventListener('hn_hospitals_updated', handleUpdate);
 
     return () => {
       active = false;
       window.removeEventListener('hn_doctors_updated', handleUpdate);
+      window.removeEventListener('hn_hospitals_updated', handleUpdate);
     };
   }, []);
 
@@ -236,15 +256,32 @@ export default function DoctorHospital() {
     <div className="page">
       <PageHeader
         title="Doctor & Hospital"
-        description="Search doctors and hospitals using our healthcare database."
+        description="Search verified clinicians and hospital networks across Indian cities."
         actions={
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => setShowAddModal(true)}
-          >
-            <UserPlus size={16} /> Add Doctor
-          </button>
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                setAddDocError('');
+                setAddDocSuccess('');
+                setShowAddDoctorModal(true);
+              }}
+            >
+              <UserPlus size={16} /> Add Doctor
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => {
+                setAddHospError('');
+                setAddHospSuccess('');
+                setShowAddHospitalModal(true);
+              }}
+            >
+              <Building2 size={16} /> Add Hospital
+            </button>
+          </div>
         }
       />
 
@@ -547,51 +584,95 @@ export default function DoctorHospital() {
         </section>
       )}
 
-      {showAddModal && (
+      {/* ADD DOCTOR MODAL */}
+      {showAddDoctorModal && (
         <div className="dr-overlay" role="dialog" aria-modal="true">
           <div className="dr-modal dr-modal--wide">
             <div className="dr-modal__head">
-              <h2>Add Verified Clinician to Directory</h2>
+              <div>
+                <h2>Add Verified Clinician to Database</h2>
+                <p>All fields are required to register a doctor in the healthcare provider directory.</p>
+              </div>
               <button
                 type="button"
                 className="icon-btn"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => setShowAddDoctorModal(false)}
                 aria-label="Close"
               >
                 <X size={18} />
               </button>
             </div>
+
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (!addDocName.trim()) return;
+                setAddDocError('');
+                if (
+                  !addDocName.trim() ||
+                  !addDocSpec.trim() ||
+                  !addDocExp ||
+                  !addDocFee ||
+                  !addDocHosp.trim() ||
+                  !addDocCity.trim() ||
+                  !addDocLoc.trim() ||
+                  !addDocPhone.trim() ||
+                  !addDocEmail.trim()
+                ) {
+                  setAddDocError('All fields are strictly required to create a new doctor.');
+                  return;
+                }
+
                 setAddDocSubmitting(true);
-                const saved = saveCustomDoctor({
-                  name: addDocName.trim(),
-                  specialization: addDocSpec.trim(),
-                  hospital: addDocHosp.trim(),
-                  city: addDocCity.trim(),
-                  fees: Number(addDocFee) || 750,
-                  phone: addDocPhone.trim(),
-                });
-                setAddDocSubmitting(false);
-                setAddDocSuccess(`Dr. ${saved.doctor_name} added to directory!`);
-                setTimeout(() => {
-                  setAddDocSuccess('');
-                  setShowAddModal(false);
-                  setAddDocName('');
-                }, 1200);
+                try {
+                  const saved = await saveCustomDoctor({
+                    name: addDocName.trim(),
+                    specialization: addDocSpec.trim(),
+                    experience_years: Number(addDocExp) || 1,
+                    fees: Number(addDocFee) || 500,
+                    hospital: addDocHosp.trim(),
+                    city: addDocCity.trim(),
+                    location: addDocLoc.trim(),
+                    phone: addDocPhone.trim(),
+                    email: addDocEmail.trim(),
+                  });
+
+                  setAddDocSuccess(`Dr. ${saved.doctor_name || addDocName} has been successfully added to the database!`);
+                  setTimeout(() => {
+                    setAddDocSuccess('');
+                    setShowAddDoctorModal(false);
+                    setAddDocName('');
+                    setAddDocSpec('General Medicine');
+                    setAddDocExp('10');
+                    setAddDocHosp('');
+                    setAddDocCity('');
+                    setAddDocLoc('');
+                    setAddDocFee('800');
+                    setAddDocPhone('+91 98765 43210');
+                    setAddDocEmail('');
+                  }, 1200);
+                } catch (err) {
+                  setAddDocError(err.message || 'Failed to save doctor.');
+                } finally {
+                  setAddDocSubmitting(false);
+                }
               }}
             >
               <div className="dr-modal__body">
                 {addDocSuccess && (
-                  <p style={{ color: '#047857', fontWeight: 600, padding: '0.5rem', background: '#ecfdf5', borderRadius: 'var(--r-md)' }}>
+                  <p style={{ color: '#047857', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#ecfdf5', borderRadius: 'var(--r-md)', border: '1px solid #a7f3d0', marginBottom: '1rem' }}>
                     ✓ {addDocSuccess}
                   </p>
                 )}
+
+                {addDocError && (
+                  <p style={{ color: '#b91c1c', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#fef2f2', borderRadius: 'var(--r-md)', border: '1px solid #fecaca', marginBottom: '1rem' }}>
+                    ⚠ {addDocError}
+                  </p>
+                )}
+
                 <div className="dr-form-grid">
                   <label className="stack">
-                    <span className="label">Doctor Full Name</span>
+                    <span className="label">Doctor Full Name <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"
                       required
@@ -600,63 +681,143 @@ export default function DoctorHospital() {
                       onChange={(e) => setAddDocName(e.target.value)}
                     />
                   </label>
+
                   <label className="stack">
-                    <span className="label">Specialization</span>
+                    <span className="label">Specialization / Department <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"
                       required
+                      list="doc-specialties-list"
                       placeholder="e.g. Cardiology"
                       value={addDocSpec}
                       onChange={(e) => setAddDocSpec(e.target.value)}
                     />
+                    <datalist id="doc-specialties-list">
+                      <option value="General Medicine" />
+                      <option value="Cardiology" />
+                      <option value="Pulmonology" />
+                      <option value="Orthopedics" />
+                      <option value="Pediatrics" />
+                      <option value="Dermatology" />
+                      <option value="Neurology" />
+                      <option value="Gynecology" />
+                      <option value="General Surgery" />
+                      <option value="Oncology" />
+                      <option value="Ophthalmology" />
+                      <option value="ENT" />
+                      <option value="Psychiatry" />
+                      <option value="Gastroenterology" />
+                    </datalist>
                   </label>
+
                   <label className="stack">
-                    <span className="label">Hospital / Clinic</span>
-                    <input
-                      className="field"
-                      required
-                      placeholder="e.g. Apollo Hospital"
-                      value={addDocHosp}
-                      onChange={(e) => setAddDocHosp(e.target.value)}
-                    />
-                  </label>
-                  <label className="stack">
-                    <span className="label">City</span>
-                    <input
-                      className="field"
-                      required
-                      placeholder="e.g. Mumbai, Delhi, Bangalore"
-                      value={addDocCity}
-                      onChange={(e) => setAddDocCity(e.target.value)}
-                    />
-                  </label>
-                  <label className="stack">
-                    <span className="label">Consultation Fee (₹)</span>
+                    <span className="label">Experience (Years) <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"
                       type="number"
+                      min="0"
+                      max="75"
                       required
-                      placeholder="e.g. 900"
+                      placeholder="e.g. 14"
+                      value={addDocExp}
+                      onChange={(e) => setAddDocExp(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Consultation Fee (₹) <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="e.g. 800"
                       value={addDocFee}
                       onChange={(e) => setAddDocFee(e.target.value)}
                     />
                   </label>
+
                   <label className="stack">
-                    <span className="label">Clinic Phone</span>
+                    <span className="label">Hospital / Clinic Name <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"
-                      placeholder="+91 98765 43210"
+                      required
+                      list="doc-hospitals-list"
+                      placeholder="e.g. Apollo Hospital"
+                      value={addDocHosp}
+                      onChange={(e) => setAddDocHosp(e.target.value)}
+                    />
+                    <datalist id="doc-hospitals-list">
+                      {hospitalsData.map((h, i) => (
+                        <option key={`${h.hospital_name}-${i}`} value={h.hospital_name} />
+                      ))}
+                    </datalist>
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">City <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      list="doc-cities-list"
+                      placeholder="e.g. Delhi, Mumbai, Bangalore"
+                      value={addDocCity}
+                      onChange={(e) => setAddDocCity(e.target.value)}
+                    />
+                    <datalist id="doc-cities-list">
+                      <option value="Delhi" />
+                      <option value="Mumbai" />
+                      <option value="Bangalore" />
+                      <option value="Hyderabad" />
+                      <option value="Chennai" />
+                      <option value="Kolkata" />
+                      <option value="Pune" />
+                      <option value="Ahmedabad" />
+                    </datalist>
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Clinic Location / Area <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      placeholder="e.g. Connaught Place, Block B"
+                      value={addDocLoc}
+                      onChange={(e) => setAddDocLoc(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Contact Phone <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="tel"
+                      required
+                      placeholder="e.g. +91 98765 43210"
                       value={addDocPhone}
                       onChange={(e) => setAddDocPhone(e.target.value)}
                     />
                   </label>
+
+                  <label className="stack" style={{ gridColumn: 'span 2' }}>
+                    <span className="label">Official Email Address <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="email"
+                      required
+                      placeholder="e.g. dr.verma@apollo.com"
+                      value={addDocEmail}
+                      onChange={(e) => setAddDocEmail(e.target.value)}
+                    />
+                  </label>
                 </div>
               </div>
+
               <div className="dr-modal__foot">
                 <button
                   type="button"
                   className="btn btn--ghost"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => setShowAddDoctorModal(false)}
                 >
                   Cancel
                 </button>
@@ -665,7 +826,222 @@ export default function DoctorHospital() {
                   className="btn btn--primary"
                   disabled={addDocSubmitting}
                 >
-                  {addDocSubmitting ? 'Saving...' : 'Add to Directory'}
+                  {addDocSubmitting ? 'Registering...' : 'Add to Doctor Database'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD HOSPITAL MODAL */}
+      {showAddHospitalModal && (
+        <div className="dr-overlay" role="dialog" aria-modal="true">
+          <div className="dr-modal dr-modal--wide">
+            <div className="dr-modal__head">
+              <div>
+                <h2>Add New Hospital to Database</h2>
+                <p>All fields are required to register a medical facility or hospital center.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShowAddHospitalModal(false)}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setAddHospError('');
+                if (
+                  !addHospName.trim() ||
+                  !addHospType.trim() ||
+                  !addHospCity.trim() ||
+                  !addHospLoc.trim() ||
+                  !addHospAddress.trim() ||
+                  !addHospPhone.trim() ||
+                  !addHospEmergency.trim() ||
+                  !addHospBeds
+                ) {
+                  setAddHospError('All fields are strictly required to create a new hospital.');
+                  return;
+                }
+
+                setAddHospSubmitting(true);
+                try {
+                  const saved = await saveCustomHospital({
+                    hospital_name: addHospName.trim(),
+                    type: addHospType.trim(),
+                    city: addHospCity.trim(),
+                    location: addHospLoc.trim(),
+                    address: addHospAddress.trim(),
+                    phone: addHospPhone.trim(),
+                    emergency_phone: addHospEmergency.trim(),
+                    bed_count: Number(addHospBeds) || 100,
+                  });
+
+                  setAddHospSuccess(`${saved.hospital_name || addHospName} has been successfully registered in the hospital database!`);
+                  setTimeout(() => {
+                    setAddHospSuccess('');
+                    setShowAddHospitalModal(false);
+                    setAddHospName('');
+                    setAddHospType('Multi Speciality Hospital');
+                    setAddHospCity('');
+                    setAddHospLoc('');
+                    setAddHospAddress('');
+                    setAddHospPhone('+91 11 2651 5050');
+                    setAddHospEmergency('+91 11 2651 5055');
+                    setAddHospBeds('150');
+                  }, 1200);
+                } catch (err) {
+                  setAddHospError(err.message || 'Failed to save hospital.');
+                } finally {
+                  setAddHospSubmitting(false);
+                }
+              }}
+            >
+              <div className="dr-modal__body">
+                {addHospSuccess && (
+                  <p style={{ color: '#047857', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#ecfdf5', borderRadius: 'var(--r-md)', border: '1px solid #a7f3d0', marginBottom: '1rem' }}>
+                    ✓ {addHospSuccess}
+                  </p>
+                )}
+
+                {addHospError && (
+                  <p style={{ color: '#b91c1c', fontWeight: 600, padding: '0.65rem 0.85rem', background: '#fef2f2', borderRadius: 'var(--r-md)', border: '1px solid #fecaca', marginBottom: '1rem' }}>
+                    ⚠ {addHospError}
+                  </p>
+                )}
+
+                <div className="dr-form-grid">
+                  <label className="stack">
+                    <span className="label">Hospital / Clinic Name <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      placeholder="e.g. Max Super Speciality Hospital"
+                      value={addHospName}
+                      onChange={(e) => setAddHospName(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Facility Type <span style={{ color: '#dc2626' }}>*</span></span>
+                    <select
+                      className="field"
+                      required
+                      value={addHospType}
+                      onChange={(e) => setAddHospType(e.target.value)}
+                    >
+                      <option value="Super Speciality Hospital">Super Speciality Hospital</option>
+                      <option value="Multi Speciality Hospital">Multi Speciality Hospital</option>
+                      <option value="General Hospital">General Hospital</option>
+                      <option value="Specialist Clinic">Specialist Clinic</option>
+                      <option value="Diagnostic & Medical Center">Diagnostic & Medical Center</option>
+                    </select>
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">City <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      list="hosp-cities-list"
+                      placeholder="e.g. Delhi, Mumbai, Bangalore"
+                      value={addHospCity}
+                      onChange={(e) => setAddHospCity(e.target.value)}
+                    />
+                    <datalist id="hosp-cities-list">
+                      <option value="Delhi" />
+                      <option value="Mumbai" />
+                      <option value="Bangalore" />
+                      <option value="Hyderabad" />
+                      <option value="Chennai" />
+                      <option value="Kolkata" />
+                      <option value="Pune" />
+                      <option value="Ahmedabad" />
+                    </datalist>
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Location / Area <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      placeholder="e.g. Saket Institutional Area"
+                      value={addHospLoc}
+                      onChange={(e) => setAddHospLoc(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack" style={{ gridColumn: 'span 2' }}>
+                    <span className="label">Full Physical Address <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      required
+                      placeholder="e.g. 1, 2, Press Enclave Marg, Saket, New Delhi 110017"
+                      value={addHospAddress}
+                      onChange={(e) => setAddHospAddress(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Reception / OPD Phone <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="tel"
+                      required
+                      placeholder="e.g. +91 11 2651 5050"
+                      value={addHospPhone}
+                      onChange={(e) => setAddHospPhone(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Emergency / Ambulance Helpline <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="tel"
+                      required
+                      placeholder="e.g. +91 11 2651 5055"
+                      value={addHospEmergency}
+                      onChange={(e) => setAddHospEmergency(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="stack">
+                    <span className="label">Total Bed Capacity <span style={{ color: '#dc2626' }}>*</span></span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="1"
+                      required
+                      placeholder="e.g. 250"
+                      value={addHospBeds}
+                      onChange={(e) => setAddHospBeds(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="dr-modal__foot">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setShowAddHospitalModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={addHospSubmitting}
+                >
+                  {addHospSubmitting ? 'Registering...' : 'Add to Hospital Database'}
                 </button>
               </div>
             </form>

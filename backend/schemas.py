@@ -53,3 +53,31 @@ class AppointmentStatusUpdateRequest(BaseModel):
 
     status: str = Field(..., min_length=1, max_length=30)
     reason: str | None = Field(default=None, max_length=500)
+
+
+class DoctorCreateRequest(BaseModel):
+    """Request body for registering a new verified clinician."""
+
+    doctor_name: str = Field(..., min_length=2, max_length=120)
+    doctor_type: str = Field(..., min_length=2, max_length=100)
+    experience_years: int = Field(..., ge=0, le=75)
+    fees: float = Field(..., ge=0)
+    city: str = Field(..., min_length=2, max_length=100)
+    location: str = Field(..., min_length=2, max_length=150)
+    hospital_name: str = Field(..., min_length=2, max_length=150)
+    hospital_id: int | None = Field(default=None)
+    phone: str = Field(..., min_length=6, max_length=30)
+    email: str = Field(..., min_length=5, max_length=120)
+
+
+class HospitalCreateRequest(BaseModel):
+    """Request body for registering a new hospital or medical facility."""
+
+    hospital_name: str = Field(..., min_length=2, max_length=150)
+    city: str = Field(..., min_length=2, max_length=100)
+    location: str = Field(..., min_length=2, max_length=150)
+    address: str = Field(..., min_length=5, max_length=250)
+    phone: str = Field(..., min_length=6, max_length=30)
+    emergency_phone: str | None = Field(default=None, max_length=30)
+    type: str = Field(default="Multi Speciality Hospital", max_length=100)
+    bed_count: int | None = Field(default=100, ge=1)
