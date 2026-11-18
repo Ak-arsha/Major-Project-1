@@ -618,10 +618,7 @@ export default function Insurance() {
                   >
                     <option value="all">All health insurance categories</option>
                     <option value="health-indemnity">Health Indemnity</option>
-                    <option value="health-senior">Senior Citizen Health</option>
                     <option value="critical-illness">Critical Illness</option>
-                    <option value="health-topup">Health Top-up</option>
-                    <option value="hospital-cash">Hospital Cash</option>
                   </select>
                 </div>
                 {/* Policy Finder Filters */}
