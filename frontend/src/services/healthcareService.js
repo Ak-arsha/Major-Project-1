@@ -94,6 +94,142 @@ function hospitalMatchesFilter(hosp, filters = {}) {
   return true;
 }
 
+export function getDeletedDoctorIds() {
+  try {
+    const raw = localStorage.getItem('hn_deleted_doctor_ids');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getDeletedHospitalIds() {
+  try {
+    const raw = localStorage.getItem('hn_deleted_hospital_ids');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function isDoctorDeleted(doc) {
+  if (!doc) return true;
+  const name = String(doc.doctor_name || doc.name || '').toLowerCase().trim();
+  const id = String(doc.doctor_id || '').toLowerCase().trim();
+  if (name.includes('akarsha agarwal') || (name.includes('akarsha') && name.includes('agarwal'))) {
+    return true;
+  }
+  const deleted = getDeletedDoctorIds();
+  const cleanName = name.replace(/^dr\.?\s*/i, '').trim();
+  return deleted.includes(id) || deleted.includes(cleanName) || deleted.includes(name);
+}
+
+export function isHospitalDeleted(hosp) {
+  if (!hosp) return true;
+  const name = String(hosp.hospital_name || hosp.name || '').toLowerCase().trim();
+  const id = String(hosp.hospital_id || '').toLowerCase().trim();
+  const deleted = getDeletedHospitalIds();
+  return deleted.includes(id) || deleted.includes(name);
+}
+
+export async function deleteDoctor(doctorId, doctorName = '') {
+  try {
+    const deleted = getDeletedDoctorIds();
+    const idStr = String(doctorId || '').toLowerCase().trim();
+    const nameStr = String(doctorName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+
+    const updatedDeleted = Array.from(new Set([...deleted, idStr, nameStr].filter(Boolean)));
+    localStorage.setItem('hn_deleted_doctor_ids', JSON.stringify(updatedDeleted));
+
+    // Remove from hn_custom_doctors
+    const customDocs = getCustomDoctors();
+    const remainingDocs = customDocs.filter(
+      (d) =>
+        String(d.doctor_id).toLowerCase() !== idStr &&
+        String(d.doctor_name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim() !== nameStr &&
+        !isDoctorDeleted(d)
+    );
+    localStorage.setItem('hn_custom_doctors', JSON.stringify(remainingDocs));
+
+    // Remove from hn_registered_users
+    try {
+      const rawUsers = localStorage.getItem('hn_registered_users');
+      if (rawUsers) {
+        const users = JSON.parse(rawUsers);
+        if (Array.isArray(users)) {
+          const filtered = users.filter((u) => {
+            const uName = String(u.name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+            const uId = String(u.id || '').toLowerCase();
+            return uId !== idStr && uName !== nameStr && !isDoctorDeleted(u);
+          });
+          localStorage.setItem('hn_registered_users', JSON.stringify(filtered));
+        }
+      }
+    } catch {}
+
+    doctorsCache = null;
+
+    // Call backend API DELETE
+    try {
+      await fetch(`${API_BASE_URL}/api/doctors/${encodeURIComponent(doctorId)}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.info('Backend doctor delete endpoint unavailable, removed locally.');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hn_doctors_updated', { detail: { removedId: doctorId } }));
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Failed to delete doctor:', err);
+    return false;
+  }
+}
+
+export async function deleteHospital(hospitalId, hospitalName = '') {
+  try {
+    const deleted = getDeletedHospitalIds();
+    const idStr = String(hospitalId || '').toLowerCase().trim();
+    const nameStr = String(hospitalName || '').toLowerCase().trim();
+
+    const updatedDeleted = Array.from(new Set([...deleted, idStr, nameStr].filter(Boolean)));
+    localStorage.setItem('hn_deleted_hospital_ids', JSON.stringify(updatedDeleted));
+
+    // Remove from hn_custom_hospitals
+    const customHosps = getCustomHospitals();
+    const remainingHosps = customHosps.filter(
+      (h) =>
+        String(h.hospital_id).toLowerCase() !== idStr &&
+        String(h.hospital_name || '').toLowerCase().trim() !== nameStr &&
+        !isHospitalDeleted(h)
+    );
+    localStorage.setItem('hn_custom_hospitals', JSON.stringify(remainingHosps));
+
+    hospitalsCache = null;
+
+    // Call backend API DELETE
+    try {
+      await fetch(`${API_BASE_URL}/api/hospitals/${encodeURIComponent(hospitalId)}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.info('Backend hospital delete endpoint unavailable, removed locally.');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('hn_hospitals_updated', { detail: { removedId: hospitalId } }));
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('Failed to delete hospital:', err);
+    return false;
+  }
+}
+
 export function getCustomDoctors() {
   const list = [];
   const seenIds = new Set();
@@ -104,7 +240,7 @@ export function getCustomDoctors() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         parsed.forEach((d) => {
-          if (d && d.doctor_id && !seenIds.has(String(d.doctor_id))) {
+          if (d && d.doctor_id && !seenIds.has(String(d.doctor_id)) && !isDoctorDeleted(d)) {
             seenIds.add(String(d.doctor_id));
             list.push(d);
           }
@@ -115,43 +251,32 @@ export function getCustomDoctors() {
     console.warn('Failed to parse custom doctors:', err);
   }
 
-  // Also check registered users where role is doctor
+  // Scrub any legacy entries matching Akarsha Agarwal or deleted doctors
+  try {
+    const raw = localStorage.getItem('hn_custom_doctors');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((d) => !isDoctorDeleted(d));
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem('hn_custom_doctors', JSON.stringify(cleaned));
+        }
+      }
+    }
+  } catch {}
+
   try {
     const rawUsers = localStorage.getItem('hn_registered_users');
     if (rawUsers) {
       const users = JSON.parse(rawUsers);
       if (Array.isArray(users)) {
-        users.forEach((u) => {
-          if (u.role === 'doctor' && u.name) {
-            const docId = u.id || `doc-${u.email}`;
-            if (!seenIds.has(String(docId))) {
-              seenIds.add(String(docId));
-              list.push({
-                doctor_id: docId,
-                doctor_name: u.name.startsWith('Dr.') ? u.name : `Dr. ${u.name}`,
-                doctor_type: u.specialization || 'General Medicine',
-                specialization: u.specialization || 'General Medicine',
-                experience_years: u.experienceYears || 10,
-                fees: u.fee || u.fees || 750,
-                city: u.city || u.location || 'Delhi',
-                location: u.location || u.city || 'Central City Clinic',
-                hospital_id: u.hospitalId || `hosp-${(u.hospital || 'Metro Care').toLowerCase().replace(/\s+/g, '-')}`,
-                hospital_name: u.hospital || 'Metro Care Super Specialty Clinic',
-                phone: u.phone || '+91 98765 43210',
-                email: u.email,
-                rating: 4.8,
-                reviews: 48,
-                availableToday: true,
-                isRegistered: true,
-              });
-            }
-          }
-        });
+        const cleaned = users.filter((u) => !isDoctorDeleted(u));
+        if (cleaned.length !== users.length) {
+          localStorage.setItem('hn_registered_users', JSON.stringify(cleaned));
+        }
       }
     }
-  } catch (err) {
-    console.warn('Failed to parse registered doctor users:', err);
-  }
+  } catch {}
 
   return list;
 }
@@ -372,7 +497,7 @@ export async function getDoctors(filters = {}) {
   const merged = [];
   const seenIds = new Set();
 
-  if (doctorMatchesFilter(VERIFIED_TESTING_DOCTOR, filters)) {
+  if (doctorMatchesFilter(VERIFIED_TESTING_DOCTOR, filters) && !isDoctorDeleted(VERIFIED_TESTING_DOCTOR)) {
     merged.push(VERIFIED_TESTING_DOCTOR);
     seenIds.add(String(VERIFIED_TESTING_DOCTOR.doctor_id));
   }
@@ -380,7 +505,7 @@ export async function getDoctors(filters = {}) {
   // Prepend any newly registered / custom doctors
   const customDocs = getCustomDoctors();
   customDocs.forEach((doc) => {
-    if (!seenIds.has(String(doc.doctor_id)) && doctorMatchesFilter(doc, filters)) {
+    if (!seenIds.has(String(doc.doctor_id)) && doctorMatchesFilter(doc, filters) && !isDoctorDeleted(doc)) {
       merged.push(doc);
       seenIds.add(String(doc.doctor_id));
     }
@@ -389,7 +514,8 @@ export async function getDoctors(filters = {}) {
   apiDoctors.forEach((doc) => {
     if (
       !seenIds.has(String(doc.doctor_id)) &&
-      !String(doc.doctor_name || '').toLowerCase().includes('ananya rao')
+      !String(doc.doctor_name || '').toLowerCase().includes('ananya rao') &&
+      !isDoctorDeleted(doc)
     ) {
       merged.push(doc);
       seenIds.add(String(doc.doctor_id));
@@ -432,7 +558,7 @@ export async function getHospitals(filters = {}) {
   const merged = [];
   const seenHospIds = new Set();
 
-  if (hospitalMatchesFilter(VERIFIED_TESTING_HOSPITAL, filters)) {
+  if (hospitalMatchesFilter(VERIFIED_TESTING_HOSPITAL, filters) && !isHospitalDeleted(VERIFIED_TESTING_HOSPITAL)) {
     merged.push(VERIFIED_TESTING_HOSPITAL);
     seenHospIds.add(String(VERIFIED_TESTING_HOSPITAL.hospital_id));
   }
@@ -440,7 +566,7 @@ export async function getHospitals(filters = {}) {
   // Add custom registered hospitals
   const customHosps = getCustomHospitals();
   customHosps.forEach((hosp) => {
-    if (!seenHospIds.has(String(hosp.hospital_id)) && hospitalMatchesFilter(hosp, filters)) {
+    if (!seenHospIds.has(String(hosp.hospital_id)) && hospitalMatchesFilter(hosp, filters) && !isHospitalDeleted(hosp)) {
       merged.push(hosp);
       seenHospIds.add(String(hosp.hospital_id));
     }
@@ -458,7 +584,7 @@ export async function getHospitals(filters = {}) {
         address: `${doc.hospital_name}, ${doc.city || 'Delhi'}`,
         phone: doc.phone || '+91 98765 43210',
       };
-      if (hospitalMatchesFilter(customHosp, filters)) {
+      if (hospitalMatchesFilter(customHosp, filters) && !isHospitalDeleted(customHosp)) {
         merged.push(customHosp);
         seenHospIds.add(String(doc.hospital_id));
       }
@@ -468,7 +594,8 @@ export async function getHospitals(filters = {}) {
   apiHospitals.forEach((hosp) => {
     if (
       !seenHospIds.has(String(hosp.hospital_id)) &&
-      !String(hosp.hospital_name || '').toLowerCase().includes('sunrise chest')
+      !String(hosp.hospital_name || '').toLowerCase().includes('sunrise chest') &&
+      !isHospitalDeleted(hosp)
     ) {
       merged.push(hosp);
       seenHospIds.add(String(hosp.hospital_id));

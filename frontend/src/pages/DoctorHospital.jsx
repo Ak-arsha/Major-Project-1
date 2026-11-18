@@ -14,11 +14,19 @@ import {
   UserRound,
   BriefcaseMedical,
   X,
+  Trash2,
 } from 'lucide-react';
 
 import PageHeader from '../components/common/PageHeader';
 import { useAuth } from '../context/AuthContext';
-import { getDoctors, getHospitals, saveCustomDoctor, saveCustomHospital } from '../services/healthcareService';
+import {
+  getDoctors,
+  getHospitals,
+  saveCustomDoctor,
+  saveCustomHospital,
+  deleteDoctor,
+  deleteHospital,
+} from '../services/healthcareService';
 import {
   clearAllSearchHistory,
   loadSearchHistory,
@@ -115,6 +123,51 @@ export default function DoctorHospital() {
   const [addHospSubmitting, setAddHospSubmitting] = useState(false);
   const [addHospSuccess, setAddHospSuccess] = useState('');
   const [addHospError, setAddHospError] = useState('');
+
+  // Remove doctor & hospital feedback
+  const [actionNotice, setActionNotice] = useState('');
+
+  const handleRemoveDoctor = async (doc) => {
+    const docName = doc.doctor_name || 'this doctor';
+    const confirmed = window.confirm(`Are you sure you want to remove ${docName} from the database?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteDoctor(doc.doctor_id, doc.doctor_name);
+      setDoctorsData((prev) =>
+        prev.filter(
+          (d) =>
+            String(d.doctor_id) !== String(doc.doctor_id) &&
+            d.doctor_name !== doc.doctor_name
+        )
+      );
+      setActionNotice(`${docName} was successfully removed.`);
+      setTimeout(() => setActionNotice(''), 4500);
+    } catch (err) {
+      alert(`Could not remove doctor: ${err.message || err}`);
+    }
+  };
+
+  const handleRemoveHospital = async (hosp) => {
+    const hospName = hosp.hospital_name || 'this hospital';
+    const confirmed = window.confirm(`Are you sure you want to remove ${hospName} from the database?`);
+    if (!confirmed) return;
+
+    try {
+      await deleteHospital(hosp.hospital_id, hosp.hospital_name);
+      setHospitalsData((prev) =>
+        prev.filter(
+          (h) =>
+            String(h.hospital_id) !== String(hosp.hospital_id) &&
+            h.hospital_name !== hosp.hospital_name
+        )
+      );
+      setActionNotice(`${hospName} was successfully removed.`);
+      setTimeout(() => setActionNotice(''), 4500);
+    } catch (err) {
+      alert(`Could not remove hospital: ${err.message || err}`);
+    }
+  };
 
   // Fetch actual doctors and hospitals from FastAPI & persistent registry
   useEffect(() => {
@@ -284,6 +337,41 @@ export default function DoctorHospital() {
           </div>
         }
       />
+
+      {actionNotice && (
+        <div
+          style={{
+            background: 'rgba(34, 197, 94, 0.12)',
+            border: '1px solid rgba(34, 197, 94, 0.35)',
+            color: '#15803d',
+            borderRadius: '10px',
+            padding: '0.85rem 1.25rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.92rem',
+            fontWeight: 500,
+          }}
+        >
+          <span>{actionNotice}</span>
+          <button
+            type="button"
+            onClick={() => setActionNotice('')}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'inherit',
+              display: 'flex',
+              padding: '2px',
+            }}
+            aria-label="Dismiss notice"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       <section className="panel search-panel" aria-label="Search">
 
@@ -495,25 +583,46 @@ export default function DoctorHospital() {
                   </li>
                 </ul>
 
-                <button
-                  className="btn btn--primary btn--block"
-                  onClick={() =>
-                    navigate('/appointments', {
-                      state: {
-                        doctorId: d.doctor_id,
-                        doctorName: d.doctor_name,
-                        specialization: d.doctor_type || d.specialization,
-                        hospitalId: d.hospital_id,
-                        hospitalName: d.hospital_name,
-                        city: d.city,
-                        fees: d.fees,
-                      },
-                    })
-                  }
-                >
-                  <CalendarPlus size={16} />
-                  Book appointment
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: 'auto' }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    style={{ flex: 1 }}
+                    onClick={() =>
+                      navigate('/appointments', {
+                        state: {
+                          doctorId: d.doctor_id,
+                          doctorName: d.doctor_name,
+                          specialization: d.doctor_type || d.specialization,
+                          hospitalId: d.hospital_id,
+                          hospitalName: d.hospital_name,
+                          city: d.city,
+                          fees: d.fees,
+                        },
+                      })
+                    }
+                  >
+                    <CalendarPlus size={16} />
+                    Book appointment
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    style={{
+                      color: '#dc2626',
+                      borderColor: 'rgba(220, 38, 38, 0.28)',
+                      padding: '0 0.85rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                    onClick={() => handleRemoveDoctor(d)}
+                    title={`Remove ${d.doctor_name}`}
+                  >
+                    <Trash2 size={15} />
+                    <span>Remove</span>
+                  </button>
+                </div>
 
               </article>
             ))}
@@ -562,21 +671,42 @@ export default function DoctorHospital() {
                   </li>
                 </ul>
 
-                <button
-                  className="btn btn--ghost btn--block"
-                  onClick={() =>
-                    navigate('/appointments', {
-                      state: {
-                        hospitalId: h.hospital_id,
-                        hospitalName: h.hospital_name,
-                        city: h.city,
-                      }
-                    })
-                  }
-                >
-                  <BriefcaseMedical size={16} />
-                  Book at this hospital
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: 'auto' }}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    style={{ flex: 1 }}
+                    onClick={() =>
+                      navigate('/appointments', {
+                        state: {
+                          hospitalId: h.hospital_id,
+                          hospitalName: h.hospital_name,
+                          city: h.city,
+                        }
+                      })
+                    }
+                  >
+                    <BriefcaseMedical size={16} />
+                    Book at this hospital
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    style={{
+                      color: '#dc2626',
+                      borderColor: 'rgba(220, 38, 38, 0.28)',
+                      padding: '0 0.85rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                    onClick={() => handleRemoveHospital(h)}
+                    title={`Remove ${h.hospital_name}`}
+                  >
+                    <Trash2 size={15} />
+                    <span>Remove</span>
+                  </button>
+                </div>
 
               </article>
             ))}
