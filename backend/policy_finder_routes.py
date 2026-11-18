@@ -37,9 +37,14 @@ def get_policies(
 
 @router.get("/policies/{uin}")
 def get_policy_details(uin: str):
-    """Get complete details of a policy using its UIN."""
+    """Get complete details of a policy using its UIN with database priority."""
 
     try:
+        from backend.policy_finder_database import get_policy_details_from_db
+        db_policy = get_policy_details_from_db(uin)
+        if db_policy:
+            return db_policy
+
         return fetch_policy_details(uin)
 
     except ValueError as error:

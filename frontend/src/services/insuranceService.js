@@ -420,93 +420,136 @@ export function parseInsuranceAmounts(value) {
   return amounts;
 }
 
-export function matchesSumInsured(values, minAmount, maxAmount) {
+export function matchesSumInsured(policy, minAmount, maxAmount) {
   if ((minAmount == null || minAmount === '') && (maxAmount == null || maxAmount === '')) {
     return true;
   }
   const minLimit = minAmount != null && minAmount !== '' ? parseFloat(minAmount) : 0;
   const maxLimit = maxAmount != null && maxAmount !== '' ? parseFloat(maxAmount) : Infinity;
 
-  const policyAmounts = [];
-  for (const v of values || []) {
-    policyAmounts.push(...parseInsuranceAmounts(v));
-  }
-  if (policyAmounts.length === 0) return true;
+  // Use pre-computed numbers if policy object provided
+  const fv = (policy && policy.filter_values) || {};
+  let pMin = fv.sum_insured_min;
+  let pMax = fv.sum_insured_max;
 
-  return policyAmounts.some((amt) => amt >= minLimit && amt <= maxLimit);
+  if (pMin == null && pMax == null) {
+    const rawList = Array.isArray(policy) ? policy : fv.sum_insured_options || [];
+    const parsed = [];
+    for (const v of rawList) {
+      parsed.push(...parseInsuranceAmounts(v));
+    }
+    if (parsed.length > 0) {
+      pMin = Math.min(...parsed);
+      pMax = Math.max(...parsed);
+    }
+  }
+
+  if (pMin == null && pMax == null) return true;
+
+  if (pMax != null && pMax < minLimit) return false;
+  if (pMin != null && pMin > maxLimit) return false;
+
+  return true;
 }
 
 export function matchesCopayFilter(values, selected) {
   if (!selected) return true;
-  const sel = String(selected).toLowerCase();
-  for (const value of values || []) {
-    const text = String(value).toLowerCase();
-    const percentages = [];
-    const pRegex = /(\d+(?:\.\d+)?)\s*%/g;
-    let pMatch;
-    while ((pMatch = pRegex.exec(text)) !== null) {
-      percentages.push(parseFloat(pMatch[1]));
-    }
+  const sel = String(selected).toLowerCase().trim();
+  const rawText = Array.isArray(values) ? values.join(' ').toLowerCase() : String(values || '').toLowerCase();
 
-    const isOptional =
-      text.includes('unless opted') ||
-      text.includes('voluntary') ||
-      text.includes('optional');
-
-    const isConditional = [
-      'except', 'zone', 'higher', 'depending', 'may apply', 'outside',
-      'specific', 'variant', 'if treated', 'late intimation', 'not for accidents',
-    ].some((t) => text.includes(t));
-
-    if (sel === 'no_copay') {
-      if (
-        percentages.length === 0 &&
-        !isOptional &&
-        !isConditional &&
-        (text.trim() === 'none' || text.includes('no co-payment') || text.includes('no copay'))
-      ) {
-        return true;
-      }
-    } else if (sel === 'optional') {
-      if (isOptional) return true;
-    } else if (sel === '5' || sel === '10' || sel === '20') {
-      const num = parseFloat(sel);
-      if (percentages.includes(num)) return true;
-    } else if (sel === 'conditional') {
-      if (isConditional || percentages.some((p) => ![5, 10, 20].includes(p))) {
-        return true;
-      }
-    }
+  if (sel === 'no_copay') {
+    return (
+      rawText.includes('none') ||
+      rawText.includes('0%') ||
+      rawText.includes('no copay') ||
+      rawText.includes('no co-pay') ||
+      rawText.includes('no co-payment')
+    );
   }
-  return false;
+
+  if (sel === '5') {
+    return rawText.includes('5%');
+  }
+
+  if (sel === '10') {
+    return rawText.includes('10%');
+  }
+
+  if (sel === '20') {
+    return rawText.includes('20%');
+  }
+
+  if (sel === 'optional') {
+    return (
+      rawText.includes('unless opted') ||
+      rawText.includes('optional') ||
+      rawText.includes('voluntary')
+    );
+  }
+
+  return rawText.includes(sel);
 }
 
 export function matchesDeductibleFilter(values, selected) {
   if (!selected) return true;
   const sel = String(selected).toLowerCase().trim();
-  for (const value of values || []) {
-    const text = String(value).toLowerCase().trim();
-    const isNone = text === 'none' || text.startsWith('none (na)');
-    const isOptional =
-      text.includes('unless opted') ||
-      text.includes('voluntary') ||
-      text.includes('optional');
+  const rawText = Array.isArray(values) ? values.join(' ').toLowerCase() : String(values || '').toLowerCase();
 
-    if (sel === 'no_deductible' && isNone) return true;
-    if (sel === 'optional' && isOptional) return true;
-    if (sel === 'has_deductible' && !isNone && !isOptional) return true;
+  if (sel === 'no_deductible') {
+    return (
+      rawText.startsWith('none') ||
+      rawText.includes('none (na)') ||
+      rawText.includes('no deductible')
+    );
   }
-  return false;
+
+  if (sel === 'optional') {
+    return (
+      rawText.includes('unless opted') ||
+      rawText.includes('voluntary') ||
+      rawText.includes('optional')
+    );
+  }
+
+  if (sel === 'has_deductible') {
+    return !rawText.startsWith('none') && !rawText.includes('unless opted');
+  }
+
+  return rawText.includes(sel);
 }
 
-export function matchesWaitingFilter(values, selected) {
+export function matchesWaitingFilter(values, selected, type = 'ped') {
   if (!selected) return true;
   const sel = String(selected).toLowerCase().trim();
-  for (const value of values || []) {
-    const val = String(value).toLowerCase().trim();
-    if (val.includes(sel) || sel.includes(val)) return true;
+  const rawText = Array.isArray(values) ? values.join(' ').toLowerCase() : String(values || '').toLowerCase();
+
+  if (type === 'initial' || sel === '30_days' || sel === 'long_waiting') {
+    if (sel === '30_days' || sel.includes('30')) {
+      return rawText.includes('30');
+    }
+    if (sel === 'long_waiting' || sel.includes('120') || sel.includes('180')) {
+      return rawText.includes('120') || rawText.includes('180');
+    }
+    if (sel === 'none') {
+      return rawText.includes('none') || rawText.includes('nil') || rawText.includes('0');
+    }
   }
-  return false;
+
+  // PED waiting:
+  if (sel === '12_months') {
+    return rawText.includes('12') || rawText.includes('1 year');
+  }
+  if (sel === '24_months') {
+    return rawText.includes('24') || rawText.includes('2 year');
+  }
+  if (sel === '36_months') {
+    return rawText.includes('36') || rawText.includes('3 year') || rawText.includes('3 yr');
+  }
+  if (sel === 'none') {
+    return rawText.includes('none') || rawText.includes('as opted: none');
+  }
+
+  return rawText.includes(sel);
 }
 
 export function filterPolicyDataset(policies, params = {}) {
@@ -535,8 +578,7 @@ export function filterPolicyDataset(policies, params = {}) {
     (params.max_sum_insured != null && params.max_sum_insured !== '')
   ) {
     results = results.filter((p) => {
-      const vals = p.filter_values?.sum_insured_options || [];
-      return matchesSumInsured(vals, params.min_sum_insured, params.max_sum_insured);
+      return matchesSumInsured(p, params.min_sum_insured, params.max_sum_insured);
     });
   }
 
@@ -560,7 +602,7 @@ export function filterPolicyDataset(policies, params = {}) {
   if (params.initial_waiting) {
     results = results.filter((p) => {
       const vals = p.filter_values?.initial_waiting || [];
-      return matchesWaitingFilter(vals, params.initial_waiting);
+      return matchesWaitingFilter(vals, params.initial_waiting, 'initial');
     });
   }
 
@@ -568,7 +610,7 @@ export function filterPolicyDataset(policies, params = {}) {
   if (params.ped_waiting) {
     results = results.filter((p) => {
       const vals = p.filter_values?.ped_waiting || [];
-      return matchesWaitingFilter(vals, params.ped_waiting);
+      return matchesWaitingFilter(vals, params.ped_waiting, 'ped');
     });
   }
 
@@ -576,14 +618,14 @@ export function filterPolicyDataset(policies, params = {}) {
   const sortBy = params.sortBy || 'relevance';
   if (sortBy === 'sum_desc') {
     results.sort((a, b) => {
-      const aMax = Math.max(0, ...parseInsuranceAmounts(a.filter_values?.sum_insured_options));
-      const bMax = Math.max(0, ...parseInsuranceAmounts(b.filter_values?.sum_insured_options));
+      const aMax = a.filter_values?.sum_insured_max || 0;
+      const bMax = b.filter_values?.sum_insured_max || 0;
       return bMax - aMax;
     });
   } else if (sortBy === 'sum_asc') {
     results.sort((a, b) => {
-      const aMin = Math.min(Infinity, ...parseInsuranceAmounts(a.filter_values?.sum_insured_options));
-      const bMin = Math.min(Infinity, ...parseInsuranceAmounts(b.filter_values?.sum_insured_options));
+      const aMin = a.filter_values?.sum_insured_min || Infinity;
+      const bMin = b.filter_values?.sum_insured_min || Infinity;
       return (aMin === Infinity ? 0 : aMin) - (bMin === Infinity ? 0 : bMin);
     });
   } else if (sortBy === 'name_asc') {
@@ -601,6 +643,35 @@ export function filterPolicyDataset(policies, params = {}) {
   }
 
   return results;
+}
+
+// Fetch complete details of a policy with facts and documents
+export async function fetchPolicyDetails(uin) {
+  if (!uin) throw new Error('A valid policy UIN is required.');
+
+  // 1. Try backend endpoint
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/policy-finder/policies/${encodeURIComponent(uin)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.facts) && data.facts.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.info('Backend policy details endpoint unavailable, using verified policy dataset.');
+  }
+
+  // 2. Client-side full dataset lookup from cachedPoliciesData
+  const matched = (cachedPoliciesData.results || []).find(
+    (p) => String(p.uin || '').toLowerCase() === String(uin || '').toLowerCase()
+  );
+
+  if (matched) {
+    return matched;
+  }
+
+  throw new Error(`Policy with UIN ${uin} could not be found.`);
 }
 
 // Fetch Policy Finder cached policies with full fallback to 31 verified policies

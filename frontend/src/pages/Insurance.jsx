@@ -25,6 +25,7 @@ import {
   answerInsuranceQuestion,
   fetchAllInsuranceDocuments,
   fetchPolicyFinderPolicies,
+  fetchPolicyDetails,
   filterPolicyDataset,
   uploadInsurancePDF,
 } from "../services/insuranceService";
@@ -117,62 +118,22 @@ export default function Insurance() {
       setFinderLoading(false);
     }
   };
-  const fetchPolicyDetails = async (uin) => {
+  const handleOpenPolicyDetails = async (uin) => {
     setDetailsLoading(true);
     setDetailsError("");
     setPolicyDetails(null);
     setSelectedFinderPolicy(uin);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/api/policy-finder/policies/${encodeURIComponent(uin)}`,
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Unable to load policy details.");
-      }
-
+      const data = await fetchPolicyDetails(uin);
       setPolicyDetails(data);
     } catch (err) {
-      console.warn("Policy details API failed, using cached policy info:", err);
+      console.warn("Policy details loading error:", err);
       const matched = finderPolicies.find(
         (p) => String(p.uin || '').toLowerCase() === String(uin || '').toLowerCase()
       );
       if (matched) {
-        setPolicyDetails({
-          ...matched,
-          name: matched.name,
-          insurer: matched.insurer,
-          uin: matched.uin,
-          category: matched.category,
-          category_name: matched.category?.replaceAll("-", " "),
-          description:
-            matched.summary ||
-            matched.description ||
-            "Comprehensive health insurance policy covering in-patient hospitalization, emergency daycare treatments, and pre/post-hospitalization medical expenses.",
-          key_benefits: matched.key_benefits || [
-            "Cashless treatment across network hospitals nationwide",
-            "In-patient hospitalization and ICU charges covered",
-            "Pre and post hospitalization medical expense coverage (30/60 days)",
-            "Emergency ambulance assistance cover",
-          ],
-          sum_insured_options: matched.sum_insured_options || [
-            "₹3,00,000",
-            "₹5,00,000",
-            "₹10,00,000",
-            "₹25,00,000",
-          ],
-          waiting_periods: matched.waiting_periods || {
-            initial: matched.initial_waiting || "30 days",
-            pre_existing_diseases: matched.ped_waiting || "36 months",
-            specific_illnesses: "24 months",
-          },
-          copay: matched.copay || "None (0%)",
-          room_rent_limit: matched.room_rent_limit || "No sub-limit / Standard private room",
-        });
-        setDetailsError("");
+        setPolicyDetails(matched);
       } else {
         setDetailsError(err.message || "Unable to load policy details.");
       }
@@ -711,7 +672,6 @@ export default function Insurance() {
                   </div>
 
                   {/* Co-payment */}
-
                   <select
                     className="field"
                     value={finderFilters.copay}
@@ -722,13 +682,12 @@ export default function Insurance() {
                       })
                     }
                   >
-                    <option value="">All Co-payment</option>
-                    <option value="no_copay">No Co-payment</option>
-                    <option value="optional">Optional Co-payment</option>
-                    <option value="5">5%</option>
-                    <option value="10">10%</option>
-                    <option value="20">20%</option>
-                    <option value="conditional">Other / Conditional</option>
+                    <option value="">All Co-payments</option>
+                    <option value="no_copay">No Co-payment (0%)</option>
+                    <option value="5">5% Co-pay</option>
+                    <option value="10">10% Co-pay</option>
+                    <option value="20">20% Co-pay</option>
+                    <option value="optional">Optional / Voluntary Co-pay</option>
                   </select>
 
                   {/* Deductible */}
@@ -743,8 +702,8 @@ export default function Insurance() {
                     }
                   >
                     <option value="">All Deductibles</option>
-                    <option value="no_deductible">No Deductible</option>
-                    <option value="optional">Optional Deductible</option>
+                    <option value="no_deductible">No Deductible (Nil)</option>
+                    <option value="optional">Optional / Voluntary Deductible</option>
                     <option value="has_deductible">Has Deductible</option>
                   </select>
 
@@ -760,11 +719,9 @@ export default function Insurance() {
                     }
                   >
                     <option value="">All Initial Waiting Periods</option>
-                    {(filterOptions.initial_waiting || []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
+                    <option value="30_days">30 Days (Standard illness wait)</option>
+                    <option value="long_waiting">120 – 180 Days (Specific conditions)</option>
+                    <option value="none">None / Immediate</option>
                   </select>
 
                   {/* PED Waiting */}
@@ -779,11 +736,10 @@ export default function Insurance() {
                     }
                   >
                     <option value="">All PED Waiting Periods</option>
-                    {(filterOptions.ped_waiting || []).map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
+                    <option value="12_months">12 Months (1 Year)</option>
+                    <option value="24_months">24 Months (2 Years)</option>
+                    <option value="36_months">36 Months (3 Years)</option>
+                    <option value="none">None / Immediate Cover</option>
                   </select>
                 </div>
 
@@ -890,33 +846,30 @@ export default function Insurance() {
                       </p>
 
                       {policy.filter_values && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', margin: '0.4rem 0 0.85rem' }}>
-                          {policy.filter_values.sum_insured_options?.[0] && (
-                            <span style={{ fontSize: '0.72rem', background: '#e0f2fe', color: '#0369a1', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
-                              {policy.filter_values.sum_insured_options[0].length > 30
-                                ? policy.filter_values.sum_insured_options[0].slice(0, 28) + '…'
-                                : policy.filter_values.sum_insured_options[0]}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', margin: '0.6rem 0 1rem' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.73rem', background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                              💰 {policy.filter_values.sum_insured_display || 'Sum Insured on request'}
                             </span>
-                          )}
-                          {policy.filter_values.copay?.[0] && (
-                            <span style={{ fontSize: '0.72rem', background: '#f0fdf4', color: '#15803d', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
-                              Co-pay: {policy.filter_values.copay[0].length > 22
-                                ? policy.filter_values.copay[0].slice(0, 20) + '…'
-                                : policy.filter_values.copay[0]}
+                            <span style={{ fontSize: '0.73rem', background: '#f0fdf4', color: '#15803d', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                              🤝 {policy.filter_values.copay_display || 'No Co-pay'}
                             </span>
-                          )}
-                          {policy.filter_values.ped_waiting?.[0] && (
-                            <span style={{ fontSize: '0.72rem', background: '#fef3c7', color: '#b45309', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
-                              PED: {policy.filter_values.ped_waiting[0]}
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            <span style={{ fontSize: '0.73rem', background: '#fef3c7', color: '#b45309', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                              ⏳ PED: {policy.filter_values.ped_waiting_display || '36 Months'}
                             </span>
-                          )}
+                            <span style={{ fontSize: '0.73rem', background: '#f5f3ff', color: '#6d28d9', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                              🏥 {policy.filter_values.room_rent_display || 'Standard Room'}
+                            </span>
+                          </div>
                         </div>
                       )}
 
                       <button
                         type="button"
                         className="btn btn--primary"
-                        onClick={() => fetchPolicyDetails(policy.uin)}
+                        onClick={() => handleOpenPolicyDetails(policy.uin)}
                       >
                         View Details
                       </button>
@@ -962,7 +915,7 @@ export default function Insurance() {
                   <button
                     type="button"
                     className="btn btn--secondary"
-                    onClick={() => fetchPolicyDetails(selectedFinderPolicy)}
+                    onClick={() => handleOpenPolicyDetails(selectedFinderPolicy)}
                   >
                     Retry
                   </button>
@@ -973,7 +926,7 @@ export default function Insurance() {
                 <>
                   <section className="panel">
                     <span className="policy-card__kind">
-                      {policyDetails.category_name || policyDetails.category}
+                      {policyDetails.category_name || policyDetails.category?.replaceAll("-", " ")}
                     </span>
 
                     <h2>{policyDetails.name}</h2>
@@ -990,62 +943,119 @@ export default function Insurance() {
                     </p>
 
                     <p>
-                      <strong>Status:</strong> {policyDetails.status}
+                      <strong>Status:</strong>{" "}
+                      <span style={{ textTransform: 'capitalize', fontWeight: 600, color: '#16a34a' }}>
+                        {policyDetails.status || "Active"}
+                      </span>
                     </p>
+
+                    {/* Key Attribute Badges */}
+                    {policyDetails.filter_values && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                        {policyDetails.filter_values.sum_insured_display && (
+                          <div style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.825rem', fontWeight: 600 }}>
+                            Sum Insured: {policyDetails.filter_values.sum_insured_display}
+                          </div>
+                        )}
+                        {policyDetails.filter_values.copay_display && (
+                          <div style={{ background: '#f0fdf4', color: '#15803d', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.825rem', fontWeight: 600 }}>
+                            Co-pay: {policyDetails.filter_values.copay_display}
+                          </div>
+                        )}
+                        {policyDetails.filter_values.ped_waiting_display && (
+                          <div style={{ background: '#fef3c7', color: '#b45309', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.825rem', fontWeight: 600 }}>
+                            PED Waiting: {policyDetails.filter_values.ped_waiting_display}
+                          </div>
+                        )}
+                        {policyDetails.filter_values.room_rent_display && (
+                          <div style={{ background: '#f5f3ff', color: '#6d28d9', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.825rem', fontWeight: 600 }}>
+                            Room Rent: {policyDetails.filter_values.room_rent_display}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     <h3>Policy Summary</h3>
 
-                    <p>{policyDetails.summary || "Summary not available."}</p>
+                    <p style={{ lineHeight: 1.6, color: '#334155' }}>
+                      {policyDetails.summary || "Comprehensive health insurance policy covering inpatient hospitalisation, daycare procedures, and post-hospitalisation care."}
+                    </p>
 
                     {policyDetails.url && (
-                      <a
-                        href={policyDetails.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View policy on IndiaInsurances ↗
-                      </a>
+                      <p style={{ marginTop: '0.65rem' }}>
+                        <a
+                          href={policyDetails.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: '#0284c7', textDecoration: 'none', fontWeight: 500, fontSize: '0.875rem' }}
+                        >
+                          View policy on IndiaInsurances ↗
+                        </a>
+                      </p>
                     )}
                   </section>
 
                   <section className="panel">
-                    <h3 className="panel__title">Key Features</h3>
+                    <h3 className="panel__title">Key Features & Limits</h3>
 
                     {(() => {
-                      const keywords =
-                        /sum insured|co.?pay|room rent|waiting period|policy term|deductible|cumulative bonus/i;
+                      const keyKeywords = /sum insured|co.?pay|room rent|room category|icu|waiting period|policy term|deductible|cumulative bonus|no.?claim|restoration|entry age|variants|territory/i;
 
                       const keyFacts = (policyDetails.facts || []).filter(
                         (fact) =>
-                          keywords.test(
-                            `${fact.label || ""} ${fact.key || ""}`,
-                          ) &&
-                          (fact.display || fact.value != null || fact.note),
+                          (fact.section === 'Limits and co-pay' ||
+                           fact.section === 'Overview' ||
+                           keyKeywords.test(`${fact.label || ''} ${fact.key || ''}`)) &&
+                          (fact.display || fact.value != null || fact.note)
                       );
 
                       return keyFacts.length > 0 ? (
-                        <div className="stack">
+                        <div className="card-grid card-grid--2" style={{ gap: '0.85rem' }}>
                           {keyFacts.map((fact, index) => (
                             <div
                               className="insurance-policy-fact"
                               key={`${fact.key || fact.label}-${index}`}
+                              style={{ padding: '0.85rem 1rem', background: '#ffffff', borderRadius: '8px', border: '1px solid var(--border)' }}
                             >
-                              <strong>{fact.label || fact.key}</strong>
-                              <p>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.3rem' }}>
+                                <strong style={{ color: 'var(--ink-strong)', fontSize: '0.9rem' }}>
+                                  {fact.label || fact.key}
+                                </strong>
+                                {fact.section && (
+                                  <span style={{ fontSize: '0.7rem', color: '#64748b', background: '#f1f5f9', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                    {fact.section}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--ink)', lineHeight: 1.5 }}>
                                 {fact.display ||
                                   (typeof fact.value === "object"
                                     ? JSON.stringify(fact.value)
                                     : fact.value) ||
                                   fact.note}
                               </p>
+                              {fact.quote && (
+                                <p
+                                  className="insurance-policy-quote"
+                                  style={{
+                                    marginTop: '0.45rem',
+                                    fontSize: '0.78rem',
+                                    color: '#475569',
+                                    fontStyle: 'italic',
+                                    background: '#f8fafc',
+                                    padding: '0.4rem 0.65rem',
+                                    borderRadius: '4px',
+                                    borderLeft: '3px solid #0284c7',
+                                  }}
+                                >
+                                  "{fact.quote}"
+                                </p>
+                              )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="muted">
-                          Key feature details are not available in the extracted
-                          data.
-                        </p>
+                        <p className="muted">Key feature details are not available in the extracted data.</p>
                       );
                     })()}
                   </section>
@@ -1056,53 +1066,62 @@ export default function Insurance() {
                     {[
                       {
                         title: "Coverage & Benefits",
-                        pattern:
-                          /coverage|benefit|hospitalisation|hospitalization|maternity|ambulance|treatment/i,
+                        filterFn: (fact) =>
+                          (fact.section === 'Cover' ||
+                           /ambulance|ayush|day.?care|domiciliary|maternity|newborn|opd|organ.?donor|health.?checkup|modern.?treatment|hospitalisation|hospitalization|pre.?hospitalisation|post.?hospitalisation|consumables|sub.?limit/i.test(`${fact.label || ''} ${fact.key || ''}`)) &&
+                          !/sum insured options|entry age|policy term|plans and variants/i.test(`${fact.label || ''} ${fact.key || ''}`),
                       },
                       {
                         title: "Waiting Periods",
-                        pattern:
-                          /waiting period|pre.?existing|initial waiting/i,
+                        filterFn: (fact) =>
+                          fact.section === 'Waiting periods' ||
+                          /waiting period|pre.?existing|initial waiting|specific illness|moratorium/i.test(`${fact.label || ''} ${fact.key || ''}`),
                       },
                       {
                         title: "Exclusions",
-                        pattern: /exclusion|not covered|excluded/i,
+                        filterFn: (fact) =>
+                          fact.section === 'Exclusions' ||
+                          /exclusion|not covered|excluded/i.test(`${fact.label || ''} ${fact.key || ''}`),
                       },
                       {
-                        title: "Claim Process",
-                        pattern:
-                          /claim|reimbursement|cashless|pre.?authorisation/i,
+                        title: "Claim Process & Administration",
+                        filterFn: (fact) =>
+                          ['Claims', 'Renewal and rights', 'Eligibility', 'Premium'].includes(fact.section) ||
+                          /claim|cashless|settlement|intimation|grievance|free.?look|grace|refund|cancellation|portability|renewal/i.test(`${fact.label || ''} ${fact.key || ''}`),
                       },
                     ].map((group) => {
-                      const facts = (policyDetails.facts || []).filter(
-                        (fact) =>
-                          group.pattern.test(
-                            `${fact.label || ""} ${fact.key || ""}`,
-                          ) &&
-                          !/sum insured|co.?pay|room rent|waiting period|policy term|deductible|cumulative bonus/i.test(
-                            `${fact.label || ""} ${fact.key || ""}`,
-                          ),
-                      );
+                      const facts = (policyDetails.facts || []).filter(group.filterFn);
 
                       return (
                         <details
                           className="insurance-info-accordion"
                           key={group.title}
+                          style={{ marginBottom: '0.75rem', border: '1px solid var(--border)', borderRadius: '8px', padding: '0.65rem 0.95rem' }}
                         >
-                          <summary>
+                          <summary style={{ fontWeight: 600, cursor: 'pointer', padding: '0.35rem 0', fontSize: '0.95rem', color: '#1e293b' }}>
                             {group.title} ({facts.length})
                           </summary>
 
                           {facts.length > 0 ? (
-                            <div className="stack">
+                            <div className="stack" style={{ marginTop: '0.75rem', gap: '0.75rem' }}>
                               {facts.map((fact, index) => (
                                 <div
                                   className="insurance-policy-fact"
                                   key={`${fact.key || fact.label}-${index}`}
+                                  style={{ padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}
                                 >
-                                  <strong>{fact.label || fact.key}</strong>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                                    <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>
+                                      {fact.label || fact.key}
+                                    </strong>
+                                    {fact.section && (
+                                      <span style={{ fontSize: '0.7rem', color: '#64748b', background: '#e2e8f0', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                                        {fact.section}
+                                      </span>
+                                    )}
+                                  </div>
 
-                                  <p>
+                                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#334155', lineHeight: 1.5 }}>
                                     {fact.display ||
                                       (typeof fact.value === "object"
                                         ? JSON.stringify(fact.value)
@@ -1112,17 +1131,28 @@ export default function Insurance() {
                                   </p>
 
                                   {fact.quote && (
-                                    <p className="insurance-policy-quote">
-                                      {fact.quote}
+                                    <p
+                                      className="insurance-policy-quote"
+                                      style={{
+                                        marginTop: '0.45rem',
+                                        fontSize: '0.78rem',
+                                        color: '#475569',
+                                        fontStyle: 'italic',
+                                        background: '#ffffff',
+                                        padding: '0.4rem 0.65rem',
+                                        borderRadius: '4px',
+                                        borderLeft: '3px solid #0284c7',
+                                      }}
+                                    >
+                                      "{fact.quote}"
                                     </p>
                                   )}
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="muted">
-                              No extracted information available in this
-                              section.
+                            <p className="muted" style={{ padding: '0.5rem 0' }}>
+                              No extracted information available in this section.
                             </p>
                           )}
                         </details>
@@ -1131,31 +1161,47 @@ export default function Insurance() {
                   </section>
 
                   <section className="panel">
-                    <h3 className="panel__title">Policy Documents</h3>
+                    <h3 className="panel__title">Policy Documents ({policyDetails.documents?.length || 0})</h3>
 
                     {policyDetails.documents?.length > 0 ? (
-                      <div className="stack">
+                      <div className="card-grid card-grid--2" style={{ gap: '0.85rem' }}>
                         {policyDetails.documents.map((doc, index) => (
                           <div
                             className="insurance-policy-fact"
                             key={`${doc.kind}-${index}`}
+                            style={{ padding: '0.85rem 1rem', background: '#ffffff', borderRadius: '8px', border: '1px solid var(--border)' }}
                           >
-                            <strong>{doc.label || doc.kind}</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                              <FileText size={18} style={{ color: 'var(--brand)' }} />
+                              <strong style={{ fontSize: '0.9rem' }}>{doc.label || doc.kind}</strong>
+                            </div>
 
-                            <p>
-                              {doc.kind} ·{" "}
-                              {doc.pages || "Page count unavailable"} pages
+                            <p style={{ margin: '0.2rem 0 0.6rem', fontSize: '0.825rem', color: '#64748b' }}>
+                              Kind: <span style={{ textTransform: 'capitalize', fontWeight: 500 }}>{doc.kind}</span> ·{" "}
+                              {doc.pages ? `${doc.pages} pages` : "Page count unavailable"}
                             </p>
 
-                            {doc.source_url && (
+                            {doc.source_url ? (
                               <a
                                 href={doc.source_url}
                                 target="_blank"
                                 rel="noreferrer"
+                                className="btn btn--secondary"
+                                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
                               >
                                 Open Original PDF ↗
                               </a>
-                            )}
+                            ) : doc.url ? (
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn btn--secondary"
+                                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                              >
+                                View Document ↗
+                              </a>
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -1164,10 +1210,9 @@ export default function Insurance() {
                     )}
                   </section>
 
-                  <p className="muted">
-                    Policy information is provided for research purposes. Always
-                    verify current terms with the insurer and original policy
-                    wording.
+                  <p className="muted" style={{ marginTop: '1rem', fontSize: '0.825rem' }}>
+                    Policy information is verified from official policy wordings and filings. Always
+                    verify current terms with the insurer before making a purchase.
                   </p>
                 </>
               )}

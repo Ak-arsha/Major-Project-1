@@ -218,6 +218,90 @@ def get_cached_policies(limit=20, offset=0, category=None):
     return [dict(row) for row in rows]
 
 
+def get_policy_details_from_db(uin: str):
+    """Get complete policy details with facts and documents from local database."""
+    if not uin:
+        return None
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM insurance_policies WHERE LOWER(uin) = LOWER(?)",
+            (uin,)
+        ).fetchone()
+
+        if not row:
+            return None
+
+        policy = dict(row)
+
+        if policy.get("analysis"):
+            try:
+                policy["analysis"] = json.loads(policy["analysis"])
+            except Exception:
+                pass
+
+        facts_rows = conn.execute(
+            "SELECT * FROM insurance_policy_facts WHERE LOWER(uin) = LOWER(?) ORDER BY id",
+            (uin,)
+        ).fetchall()
+
+        facts = []
+        for f in facts_rows:
+            fd = dict(f)
+            val = fd.get("value")
+            if val is not None:
+                try:
+                    val = json.loads(val)
+                except Exception:
+                    pass
+
+            sources = []
+            if fd.get("sources"):
+                try:
+                    sources = json.loads(fd["sources"])
+                except Exception:
+                    pass
+
+            law = []
+            if fd.get("law"):
+                try:
+                    law = json.loads(fd["law"])
+                except Exception:
+                    pass
+
+            display_val = fd.get("display") or ""
+            if not display_val and val is not None:
+                display_val = str(val) if not isinstance(val, (dict, list)) else json.dumps(val)
+            if not display_val and fd.get("note"):
+                display_val = fd.get("note")
+
+            facts.append({
+                "id": fd["id"],
+                "uin": fd["uin"],
+                "key": fd["fact_key"],
+                "label": fd["label"],
+                "section": fd["section"],
+                "status": fd["status"],
+                "value": val,
+                "display": display_val,
+                "note": fd.get("note") or "",
+                "quote": fd.get("quote") or "",
+                "sources": sources,
+                "law": law
+            })
+
+        policy["facts"] = facts
+
+        docs_rows = conn.execute(
+            "SELECT * FROM insurance_policy_documents WHERE LOWER(uin) = LOWER(?) ORDER BY id",
+            (uin,)
+        ).fetchall()
+
+        policy["documents"] = [dict(d) for d in docs_rows]
+
+        return policy
+
+
 def import_policies_to_database(batch_size=20, category=None):
     """Fetch policy listings and save their complete details locally."""
 
