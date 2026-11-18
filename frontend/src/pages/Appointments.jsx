@@ -16,7 +16,7 @@ import PageHeader from '../components/common/PageHeader';
 import Notice from '../components/common/Notice';
 import { ROLES, useAuth } from '../context/AuthContext';
 import { DOCTORS as SAMPLE_DOCTORS, HOSPITALS as SAMPLE_HOSPITALS } from '../data/sampleData';
-import { getDoctors, getHospitals } from '../services/healthcareService';
+import { getDoctors, getHospitals, SUPPORTED_CITIES } from '../services/healthcareService';
 import {
   bookAppointment,
   cancelAppointment,
@@ -41,6 +41,7 @@ export default function Appointments() {
   const [initError, setInitError] = useState('');
 
   const [city, setCity] = useState(state?.city ? String(state.city).toLowerCase() : '');
+  const [specialty, setSpecialty] = useState(state?.specialization ? String(state.specialization) : '');
   const [hospitalId, setHospitalId] = useState(
     state?.hospitalId ? String(state.hospitalId) : ''
   );
@@ -168,15 +169,37 @@ export default function Appointments() {
     loadDirectory();
     const handleDocUpdate = () => loadDirectory();
     window.addEventListener('hn_doctors_updated', handleDocUpdate);
+    window.addEventListener('hn_hospitals_updated', handleDocUpdate);
+    window.addEventListener('hn_specialties_updated', handleDocUpdate);
     return () => {
       active = false;
       window.removeEventListener('hn_doctors_updated', handleDocUpdate);
+      window.removeEventListener('hn_hospitals_updated', handleDocUpdate);
+      window.removeEventListener('hn_specialties_updated', handleDocUpdate);
     };
   }, [state]);
 
   const cities = useMemo(() => {
-    const unique = [...new Set(doctorsData.map((d) => String(d.city || '').toLowerCase()).filter(Boolean))];
+    const list = [
+      ...SUPPORTED_CITIES.map((c) => c.toLowerCase()),
+      ...doctorsData.map((d) => String(d.city || '').toLowerCase()),
+      ...hospitalsData.map((h) => String(h.city || '').toLowerCase()),
+    ].filter(Boolean);
+    const unique = [...new Set(list)];
     return unique.sort((a, b) => a.localeCompare(b));
+  }, [doctorsData, hospitalsData]);
+
+  const specialties = useMemo(() => {
+    let customSpecs = [];
+    try {
+      const raw = localStorage.getItem('hn_custom_specialties');
+      if (raw) customSpecs = JSON.parse(raw);
+    } catch {}
+    const list = [
+      ...doctorsData.map((d) => d.doctor_type || d.specialization),
+      ...customSpecs,
+    ].filter(Boolean);
+    return [...new Set(list)].sort((a, b) => a.localeCompare(b));
   }, [doctorsData]);
 
   const filteredHospitals = useMemo(() => {
@@ -189,9 +212,11 @@ export default function Appointments() {
     return doctorsData.filter((d) => {
       const matchCity = !city || String(d.city || '').toLowerCase() === city;
       const matchHosp = !hospitalId || String(d.hospital_id) === hospitalId;
-      return matchCity && matchHosp;
+      const docSpec = String(d.doctor_type || d.specialization || '').toLowerCase();
+      const matchSpec = !specialty || docSpec === specialty.toLowerCase();
+      return matchCity && matchHosp && matchSpec;
     });
-  }, [doctorsData, city, hospitalId]);
+  }, [doctorsData, city, hospitalId, specialty]);
 
   const selectedDoctor = useMemo(
     () => doctorsData.find((d) => String(d.doctor_id) === doctorId) || null,
@@ -325,10 +350,28 @@ export default function Appointments() {
   const handleCityChange = (nextCity) => {
     setCity(nextCity);
     setHospitalId('');
-    const nextDocs = doctorsData.filter(
-      (d) => !nextCity || String(d.city || '').toLowerCase() === nextCity
-    );
+    const nextDocs = doctorsData.filter((d) => {
+      const matchCity = !nextCity || String(d.city || '').toLowerCase() === nextCity;
+      const docSpec = String(d.doctor_type || d.specialization || '').toLowerCase();
+      const matchSpec = !specialty || docSpec === specialty.toLowerCase();
+      return matchCity && matchSpec;
+    });
     setDoctorId(nextDocs.length > 0 ? String(nextDocs[0].doctor_id) : '');
+    setSlot('');
+  };
+
+  const handleSpecialtyChange = (nextSpec) => {
+    setSpecialty(nextSpec);
+    const nextDocs = doctorsData.filter((d) => {
+      const matchCity = !city || String(d.city || '').toLowerCase() === city;
+      const matchHosp = !hospitalId || String(d.hospital_id) === hospitalId;
+      const docSpec = String(d.doctor_type || d.specialization || '').toLowerCase();
+      const matchSpec = !nextSpec || docSpec === nextSpec.toLowerCase();
+      return matchCity && matchHosp && matchSpec;
+    });
+    if (!nextDocs.some((d) => String(d.doctor_id) === doctorId)) {
+      setDoctorId(nextDocs.length > 0 ? String(nextDocs[0].doctor_id) : '');
+    }
     setSlot('');
   };
 
@@ -337,7 +380,9 @@ export default function Appointments() {
     const nextDocs = doctorsData.filter((d) => {
       const matchCity = !city || String(d.city || '').toLowerCase() === city;
       const matchHosp = !nextHospId || String(d.hospital_id) === nextHospId;
-      return matchCity && matchHosp;
+      const docSpec = String(d.doctor_type || d.specialization || '').toLowerCase();
+      const matchSpec = !specialty || docSpec === specialty.toLowerCase();
+      return matchCity && matchHosp && matchSpec;
     });
     if (!nextDocs.some((d) => String(d.doctor_id) === doctorId)) {
       setDoctorId(nextDocs.length > 0 ? String(nextDocs[0].doctor_id) : '');
@@ -350,6 +395,7 @@ export default function Appointments() {
     const d = doctorsData.find((x) => String(x.doctor_id) === nextDocId);
     if (d?.hospital_id) setHospitalId(String(d.hospital_id));
     if (d?.city) setCity(String(d.city).toLowerCase());
+    if (d?.doctor_type || d?.specialization) setSpecialty(d.doctor_type || d.specialization);
     setSlot('');
   };
 
@@ -561,22 +607,39 @@ export default function Appointments() {
             </label>
 
             <label className="stack">
-              <span className="label">Hospital</span>
+              <span className="label">Specialization / Department</span>
               <select
                 className="field"
-                value={hospitalId}
-                onChange={(e) => handleHospitalChange(e.target.value)}
+                value={specialty}
+                onChange={(e) => handleSpecialtyChange(e.target.value)}
                 disabled={loadingInit}
               >
-                <option value="">All hospitals ({filteredHospitals.length})</option>
-                {filteredHospitals.map((h) => (
-                  <option key={h.hospital_id} value={String(h.hospital_id)}>
-                    {formatTitle(h.hospital_name)} ({formatTitle(h.city)})
+                <option value="">All specializations ({specialties.length})</option>
+                {specialties.map((s) => (
+                  <option key={s} value={s}>
+                    {formatTitle(s)}
                   </option>
                 ))}
               </select>
             </label>
           </div>
+
+          <label className="stack">
+            <span className="label">Hospital</span>
+            <select
+              className="field"
+              value={hospitalId}
+              onChange={(e) => handleHospitalChange(e.target.value)}
+              disabled={loadingInit}
+            >
+              <option value="">All hospitals ({filteredHospitals.length})</option>
+              {filteredHospitals.map((h) => (
+                <option key={h.hospital_id} value={String(h.hospital_id)}>
+                  {formatTitle(h.hospital_name)} ({formatTitle(h.city)})
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="stack">
             <span className="label">Doctor ({filteredDoctors.length} available)</span>

@@ -26,6 +26,11 @@ import {
   saveCustomHospital,
   deleteDoctor,
   deleteHospital,
+  SUPPORTED_CITIES,
+  CITY_LOCATIONS,
+  getLocationsForCity,
+  getCustomSpecialties,
+  saveCustomSpecialty,
 } from '../services/healthcareService';
 import {
   clearAllSearchHistory,
@@ -99,10 +104,16 @@ export default function DoctorHospital() {
   const [showAddDoctorModal, setShowAddDoctorModal] = useState(false);
   const [addDocName, setAddDocName] = useState('');
   const [addDocSpec, setAddDocSpec] = useState('General Medicine');
+  const [showCustomDocSpec, setShowCustomDocSpec] = useState(false);
+  const [customDocSpec, setCustomDocSpec] = useState('');
   const [addDocExp, setAddDocExp] = useState('10');
   const [addDocHosp, setAddDocHosp] = useState('');
-  const [addDocCity, setAddDocCity] = useState('');
-  const [addDocLoc, setAddDocLoc] = useState('');
+  const [showCustomDocHosp, setShowCustomDocHosp] = useState(false);
+  const [customDocHosp, setCustomDocHosp] = useState('');
+  const [addDocCity, setAddDocCity] = useState('Delhi');
+  const [addDocLoc, setAddDocLoc] = useState('Saket');
+  const [showCustomDocLoc, setShowCustomDocLoc] = useState(false);
+  const [customDocLoc, setCustomDocLoc] = useState('');
   const [addDocFee, setAddDocFee] = useState('800');
   const [addDocPhone, setAddDocPhone] = useState('+91 98765 43210');
   const [addDocEmail, setAddDocEmail] = useState('');
@@ -114,8 +125,10 @@ export default function DoctorHospital() {
   const [showAddHospitalModal, setShowAddHospitalModal] = useState(false);
   const [addHospName, setAddHospName] = useState('');
   const [addHospType, setAddHospType] = useState('Multi Speciality Hospital');
-  const [addHospCity, setAddHospCity] = useState('');
-  const [addHospLoc, setAddHospLoc] = useState('');
+  const [addHospCity, setAddHospCity] = useState('Delhi');
+  const [addHospLoc, setAddHospLoc] = useState('Saket');
+  const [showCustomHospLoc, setShowCustomHospLoc] = useState(false);
+  const [customHospLoc, setCustomHospLoc] = useState('');
   const [addHospAddress, setAddHospAddress] = useState('');
   const [addHospPhone, setAddHospPhone] = useState('+91 11 2651 5050');
   const [addHospEmergency, setAddHospEmergency] = useState('+91 11 2651 5055');
@@ -205,24 +218,39 @@ export default function DoctorHospital() {
     };
     window.addEventListener('hn_doctors_updated', handleUpdate);
     window.addEventListener('hn_hospitals_updated', handleUpdate);
+    window.addEventListener('hn_specialties_updated', handleUpdate);
 
     return () => {
       active = false;
       window.removeEventListener('hn_doctors_updated', handleUpdate);
       window.removeEventListener('hn_hospitals_updated', handleUpdate);
+      window.removeEventListener('hn_specialties_updated', handleUpdate);
     };
   }, []);
 
-  // Generate specialties from actual doctor records
+  // Generate specialties from actual doctor records and newly added custom specializations
   const specialties = useMemo(() => {
-    const values = doctorsData
-      .map((d) => d.doctor_type)
-      .filter(Boolean);
+    let customSpecs = [];
+    try {
+      const raw = localStorage.getItem('hn_custom_specialties');
+      if (raw) customSpecs = JSON.parse(raw);
+    } catch {}
+
+    const values = [
+      ...doctorsData.map((d) => d.doctor_type || d.specialization),
+      ...customSpecs,
+    ].filter(Boolean);
 
     return [...new Set(values)].sort((a, b) =>
       a.localeCompare(b)
     );
   }, [doctorsData]);
+
+  const hospitalsInDocCity = useMemo(() => {
+    return hospitalsData.filter(
+      (h) => String(h.city || '').toLowerCase() === String(addDocCity || 'Delhi').toLowerCase()
+    );
+  }, [hospitalsData, addDocCity]);
 
   const queryTokens = useMemo(() => {
     if (!query.trim()) return [];
@@ -249,8 +277,8 @@ export default function DoctorHospital() {
 
         const matchesSpecialty =
           specialty === 'All' ||
-          d.doctor_type === specialty ||
-          d.specialization === specialty;
+          String(d.doctor_type || '').toLowerCase() === specialty.toLowerCase() ||
+          String(d.specialization || '').toLowerCase() === specialty.toLowerCase();
 
         return (
           matchesQuery &&
@@ -280,7 +308,8 @@ export default function DoctorHospital() {
           doctorsData.some(
             (d) =>
               (d.hospital_name === h.hospital_name || d.hospital_id === h.hospital_id) &&
-              (d.doctor_type === specialty || d.specialization === specialty)
+              (String(d.doctor_type || '').toLowerCase() === specialty.toLowerCase() ||
+               String(d.specialization || '').toLowerCase() === specialty.toLowerCase())
           );
 
         return (
@@ -393,9 +422,15 @@ export default function DoctorHospital() {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               onKeyDown={handleSearchKeyDown}
-              placeholder="City, e.g. Delhi"
+              list="search-cities-list"
+              placeholder="City, e.g. Delhi, Mumbai"
               aria-label="Location"
             />
+            <datalist id="search-cities-list">
+              {SUPPORTED_CITIES.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </label>
 
           <button
@@ -737,14 +772,20 @@ export default function DoctorHospital() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 setAddDocError('');
+
+                const finalSpec = showCustomDocSpec ? customDocSpec.trim() : addDocSpec.trim();
+                const finalHosp = showCustomDocHosp ? customDocHosp.trim() : (addDocHosp.trim() || 'Metro Care Super Specialty Clinic');
+                const finalLoc = showCustomDocLoc ? customDocLoc.trim() : (addDocLoc.trim() || 'Saket');
+                const finalCity = addDocCity.trim() || 'Delhi';
+
                 if (
                   !addDocName.trim() ||
-                  !addDocSpec.trim() ||
+                  !finalSpec ||
                   !addDocExp ||
                   !addDocFee ||
-                  !addDocHosp.trim() ||
-                  !addDocCity.trim() ||
-                  !addDocLoc.trim() ||
+                  !finalHosp ||
+                  !finalCity ||
+                  !finalLoc ||
                   !addDocPhone.trim() ||
                   !addDocEmail.trim()
                 ) {
@@ -754,14 +795,18 @@ export default function DoctorHospital() {
 
                 setAddDocSubmitting(true);
                 try {
+                  saveCustomSpecialty(finalSpec);
+
                   const saved = await saveCustomDoctor({
                     name: addDocName.trim(),
-                    specialization: addDocSpec.trim(),
+                    specialization: finalSpec,
+                    doctor_type: finalSpec,
                     experience_years: Number(addDocExp) || 1,
                     fees: Number(addDocFee) || 500,
-                    hospital: addDocHosp.trim(),
-                    city: addDocCity.trim(),
-                    location: addDocLoc.trim(),
+                    hospital: finalHosp,
+                    hospital_name: finalHosp,
+                    city: finalCity,
+                    location: finalLoc,
                     phone: addDocPhone.trim(),
                     email: addDocEmail.trim(),
                   });
@@ -772,10 +817,16 @@ export default function DoctorHospital() {
                     setShowAddDoctorModal(false);
                     setAddDocName('');
                     setAddDocSpec('General Medicine');
+                    setShowCustomDocSpec(false);
+                    setCustomDocSpec('');
                     setAddDocExp('10');
                     setAddDocHosp('');
-                    setAddDocCity('');
-                    setAddDocLoc('');
+                    setShowCustomDocHosp(false);
+                    setCustomDocHosp('');
+                    setAddDocCity('Delhi');
+                    setAddDocLoc('Saket');
+                    setShowCustomDocLoc(false);
+                    setCustomDocLoc('');
                     setAddDocFee('800');
                     setAddDocPhone('+91 98765 43210');
                     setAddDocEmail('');
@@ -814,30 +865,38 @@ export default function DoctorHospital() {
 
                   <label className="stack">
                     <span className="label">Specialization / Department <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
+                    <select
                       className="field"
                       required
-                      list="doc-specialties-list"
-                      placeholder="e.g. Cardiology"
-                      value={addDocSpec}
-                      onChange={(e) => setAddDocSpec(e.target.value)}
-                    />
-                    <datalist id="doc-specialties-list">
-                      <option value="General Medicine" />
-                      <option value="Cardiology" />
-                      <option value="Pulmonology" />
-                      <option value="Orthopedics" />
-                      <option value="Pediatrics" />
-                      <option value="Dermatology" />
-                      <option value="Neurology" />
-                      <option value="Gynecology" />
-                      <option value="General Surgery" />
-                      <option value="Oncology" />
-                      <option value="Ophthalmology" />
-                      <option value="ENT" />
-                      <option value="Psychiatry" />
-                      <option value="Gastroenterology" />
-                    </datalist>
+                      value={showCustomDocSpec ? '__other__' : addDocSpec}
+                      onChange={(e) => {
+                        if (e.target.value === '__other__') {
+                          setShowCustomDocSpec(true);
+                          setCustomDocSpec('');
+                        } else {
+                          setShowCustomDocSpec(false);
+                          setAddDocSpec(e.target.value);
+                        }
+                      }}
+                    >
+                      {specialties.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                      <option value="__other__">+ Add New Specialization...</option>
+                    </select>
+                    {showCustomDocSpec && (
+                      <input
+                        className="field"
+                        style={{ marginTop: '0.45rem' }}
+                        required
+                        placeholder="Type new specialization (e.g. Endocrinology, Oncology, Urology)"
+                        value={customDocSpec}
+                        onChange={(e) => setCustomDocSpec(e.target.value)}
+                        autoFocus
+                      />
+                    )}
                   </label>
 
                   <label className="stack">
@@ -868,53 +927,97 @@ export default function DoctorHospital() {
                   </label>
 
                   <label className="stack">
-                    <span className="label">Hospital / Clinic Name <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
-                      className="field"
-                      required
-                      list="doc-hospitals-list"
-                      placeholder="e.g. Apollo Hospital"
-                      value={addDocHosp}
-                      onChange={(e) => setAddDocHosp(e.target.value)}
-                    />
-                    <datalist id="doc-hospitals-list">
-                      {hospitalsData.map((h, i) => (
-                        <option key={`${h.hospital_name}-${i}`} value={h.hospital_name} />
-                      ))}
-                    </datalist>
-                  </label>
-
-                  <label className="stack">
                     <span className="label">City <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
+                    <select
                       className="field"
                       required
-                      list="doc-cities-list"
-                      placeholder="e.g. Delhi, Mumbai, Bangalore"
                       value={addDocCity}
-                      onChange={(e) => setAddDocCity(e.target.value)}
-                    />
-                    <datalist id="doc-cities-list">
-                      <option value="Delhi" />
-                      <option value="Mumbai" />
-                      <option value="Bangalore" />
-                      <option value="Hyderabad" />
-                      <option value="Chennai" />
-                      <option value="Kolkata" />
-                      <option value="Pune" />
-                      <option value="Ahmedabad" />
-                    </datalist>
+                      onChange={(e) => {
+                        const newCity = e.target.value;
+                        setAddDocCity(newCity);
+                        const locs = getLocationsForCity(newCity);
+                        setAddDocLoc(locs[0] || 'City Center');
+                        setShowCustomDocLoc(false);
+                        setCustomDocLoc('');
+                      }}
+                    >
+                      {SUPPORTED_CITIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </label>
 
                   <label className="stack">
-                    <span className="label">Clinic Location / Area <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
+                    <span className="label">Clinic Location / Area in {addDocCity} <span style={{ color: '#dc2626' }}>*</span></span>
+                    <select
                       className="field"
-                      required
-                      placeholder="e.g. Connaught Place, Block B"
-                      value={addDocLoc}
-                      onChange={(e) => setAddDocLoc(e.target.value)}
-                    />
+                      value={showCustomDocLoc ? '__other__' : addDocLoc}
+                      onChange={(e) => {
+                        if (e.target.value === '__other__') {
+                          setShowCustomDocLoc(true);
+                          setCustomDocLoc('');
+                        } else {
+                          setShowCustomDocLoc(false);
+                          setAddDocLoc(e.target.value);
+                        }
+                      }}
+                    >
+                      {getLocationsForCity(addDocCity).map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc}
+                        </option>
+                      ))}
+                      <option value="__other__">+ Other location in {addDocCity} (Type custom)</option>
+                    </select>
+                    {showCustomDocLoc && (
+                      <input
+                        className="field"
+                        style={{ marginTop: '0.45rem' }}
+                        required
+                        placeholder="Type custom location / neighborhood"
+                        value={customDocLoc}
+                        onChange={(e) => setCustomDocLoc(e.target.value)}
+                        autoFocus
+                      />
+                    )}
+                  </label>
+
+                  <label className="stack" style={{ gridColumn: 'span 2' }}>
+                    <span className="label">Hospital / Clinic Facility <span style={{ color: '#dc2626' }}>*</span></span>
+                    <select
+                      className="field"
+                      value={showCustomDocHosp ? '__other__' : addDocHosp}
+                      onChange={(e) => {
+                        if (e.target.value === '__other__') {
+                          setShowCustomDocHosp(true);
+                          setCustomDocHosp('');
+                        } else {
+                          setShowCustomDocHosp(false);
+                          setAddDocHosp(e.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">Select hospital in {addDocCity}</option>
+                      {hospitalsInDocCity.map((h, i) => (
+                        <option key={`${h.hospital_name}-${i}`} value={h.hospital_name}>
+                          {h.hospital_name} ({h.location || h.city})
+                        </option>
+                      ))}
+                      <option value="__other__">+ Add / Type new hospital or clinic name...</option>
+                    </select>
+                    {showCustomDocHosp && (
+                      <input
+                        className="field"
+                        style={{ marginTop: '0.45rem' }}
+                        required
+                        placeholder="e.g. Apollo Super Specialty Hospital"
+                        value={customDocHosp}
+                        onChange={(e) => setCustomDocHosp(e.target.value)}
+                        autoFocus
+                      />
+                    )}
                   </label>
 
                   <label className="stack">
@@ -929,7 +1032,7 @@ export default function DoctorHospital() {
                     />
                   </label>
 
-                  <label className="stack" style={{ gridColumn: 'span 2' }}>
+                  <label className="stack">
                     <span className="label">Official Email Address <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"
@@ -987,11 +1090,15 @@ export default function DoctorHospital() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 setAddHospError('');
+
+                const finalLoc = showCustomHospLoc ? customHospLoc.trim() : (addHospLoc.trim() || 'Saket');
+                const finalCity = addHospCity.trim() || 'Delhi';
+
                 if (
                   !addHospName.trim() ||
                   !addHospType.trim() ||
-                  !addHospCity.trim() ||
-                  !addHospLoc.trim() ||
+                  !finalCity ||
+                  !finalLoc ||
                   !addHospAddress.trim() ||
                   !addHospPhone.trim() ||
                   !addHospEmergency.trim() ||
@@ -1006,8 +1113,8 @@ export default function DoctorHospital() {
                   const saved = await saveCustomHospital({
                     hospital_name: addHospName.trim(),
                     type: addHospType.trim(),
-                    city: addHospCity.trim(),
-                    location: addHospLoc.trim(),
+                    city: finalCity,
+                    location: finalLoc,
                     address: addHospAddress.trim(),
                     phone: addHospPhone.trim(),
                     emergency_phone: addHospEmergency.trim(),
@@ -1020,8 +1127,10 @@ export default function DoctorHospital() {
                     setShowAddHospitalModal(false);
                     setAddHospName('');
                     setAddHospType('Multi Speciality Hospital');
-                    setAddHospCity('');
-                    setAddHospLoc('');
+                    setAddHospCity('Delhi');
+                    setAddHospLoc('Saket');
+                    setShowCustomHospLoc(false);
+                    setCustomHospLoc('');
                     setAddHospAddress('');
                     setAddHospPhone('+91 11 2651 5050');
                     setAddHospEmergency('+91 11 2651 5055');
@@ -1077,35 +1186,60 @@ export default function DoctorHospital() {
 
                   <label className="stack">
                     <span className="label">City <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
+                    <select
                       className="field"
                       required
-                      list="hosp-cities-list"
-                      placeholder="e.g. Delhi, Mumbai, Bangalore"
                       value={addHospCity}
-                      onChange={(e) => setAddHospCity(e.target.value)}
-                    />
-                    <datalist id="hosp-cities-list">
-                      <option value="Delhi" />
-                      <option value="Mumbai" />
-                      <option value="Bangalore" />
-                      <option value="Hyderabad" />
-                      <option value="Chennai" />
-                      <option value="Kolkata" />
-                      <option value="Pune" />
-                      <option value="Ahmedabad" />
-                    </datalist>
+                      onChange={(e) => {
+                        const newCity = e.target.value;
+                        setAddHospCity(newCity);
+                        const locs = getLocationsForCity(newCity);
+                        setAddHospLoc(locs[0] || 'City Center');
+                        setShowCustomHospLoc(false);
+                        setCustomHospLoc('');
+                      }}
+                    >
+                      {SUPPORTED_CITIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </label>
 
                   <label className="stack">
-                    <span className="label">Location / Area <span style={{ color: '#dc2626' }}>*</span></span>
-                    <input
+                    <span className="label">Location / Area in {addHospCity} <span style={{ color: '#dc2626' }}>*</span></span>
+                    <select
                       className="field"
-                      required
-                      placeholder="e.g. Saket Institutional Area"
-                      value={addHospLoc}
-                      onChange={(e) => setAddHospLoc(e.target.value)}
-                    />
+                      value={showCustomHospLoc ? '__other__' : addHospLoc}
+                      onChange={(e) => {
+                        if (e.target.value === '__other__') {
+                          setShowCustomHospLoc(true);
+                          setCustomHospLoc('');
+                        } else {
+                          setShowCustomHospLoc(false);
+                          setAddHospLoc(e.target.value);
+                        }
+                      }}
+                    >
+                      {getLocationsForCity(addHospCity).map((loc) => (
+                        <option key={loc} value={loc}>
+                          {loc}
+                        </option>
+                      ))}
+                      <option value="__other__">+ Other location in {addHospCity} (Type custom)</option>
+                    </select>
+                    {showCustomHospLoc && (
+                      <input
+                        className="field"
+                        style={{ marginTop: '0.45rem' }}
+                        required
+                        placeholder="e.g. Saket Institutional Area"
+                        value={customHospLoc}
+                        onChange={(e) => setCustomHospLoc(e.target.value)}
+                        autoFocus
+                      />
+                    )}
                   </label>
 
                   <label className="stack" style={{ gridColumn: 'span 2' }}>
@@ -1143,7 +1277,7 @@ export default function DoctorHospital() {
                     />
                   </label>
 
-                  <label className="stack">
+                  <label className="stack" style={{ gridColumn: 'span 2' }}>
                     <span className="label">Total Bed Capacity <span style={{ color: '#dc2626' }}>*</span></span>
                     <input
                       className="field"

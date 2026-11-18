@@ -94,6 +94,64 @@ function hospitalMatchesFilter(hosp, filters = {}) {
   return true;
 }
 
+export const SUPPORTED_CITIES = [
+  'Ahmedabad',
+  'Bangalore',
+  'Chandigarh',
+  'Chennai',
+  'Delhi',
+  'Hyderabad',
+  'Jaipur',
+  'Kolkata',
+  'Mumbai',
+  'Pune',
+];
+
+export const CITY_LOCATIONS = {
+  Ahmedabad: ['Satellite', 'Bodakdev', 'Bopal', 'Ambawadi', 'Paldi', 'Memnagar', 'Nava Vadaj', 'Sabarmati', 'Maninagar', 'Vastrapur'],
+  Bangalore: ['Indiranagar', 'Koramangala', 'Whitefield', 'HSR Layout', 'BTM Layout', 'Jayanagar', 'Hebbal', 'Basavanagudi', 'Electronics City', 'Malleshwaram'],
+  Chandigarh: ['Sector 17', 'Sector 20', 'Sector 22', 'Sector 34', 'Sector 35', 'Manimajra', 'Industrial Area Phase 1', 'Sector 43'],
+  Chennai: ['Anna Nagar', 'T Nagar', 'Adyar', 'Velachery', 'Mylapore', 'Kilpauk', 'Chromepet', 'Guindy', 'Alwarpet', 'Nungambakkam'],
+  Delhi: ['Saket', 'Connaught Place', 'South Extension', 'Dwarka', 'Vasant Kunj', 'Karol Bagh', 'Hauz Khas', 'Rohini', 'Greater Kailash', 'Janakpuri'],
+  Hyderabad: ['Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'Hitech City', 'Madhapur', 'Kondapur', 'Secunderabad', 'Ameerpet', 'Kukatpally', 'Begumpet'],
+  Jaipur: ['C Scheme', 'Malviya Nagar', 'Vaishali Nagar', 'Mansarovar', 'Tonk Road', 'Raja Park', 'Jagatpura', 'Bapu Nagar'],
+  Kolkata: ['Park Street', 'Salt Lake', 'New Town', 'Ballygunge', 'Bhawanipore', 'Alipore', 'Jadavpur', 'Behala', 'Gariahat', 'Dum Dum'],
+  Mumbai: ['Bandra West', 'Andheri West', 'Andheri East', 'Powai', 'Juhu', 'Worli', 'Colaba', 'Borivali West', 'Dadar', 'Goregaon'],
+  Pune: ['Koregaon Park', 'Kothrud', 'Viman Nagar', 'Baner', 'Aundh', 'Hinjewadi', 'Hadapsar', 'Wakad', 'Shivajinagar', 'Kalyani Nagar'],
+};
+
+export function getLocationsForCity(cityName) {
+  if (!cityName) return CITY_LOCATIONS.Delhi;
+  const match = Object.keys(CITY_LOCATIONS).find(
+    (k) => k.toLowerCase() === String(cityName).toLowerCase().trim()
+  );
+  return match ? CITY_LOCATIONS[match] : ['City Center', 'Central Area', 'Main Road'];
+}
+
+export function getCustomSpecialties() {
+  try {
+    const raw = localStorage.getItem('hn_custom_specialties');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomSpecialty(spec) {
+  try {
+    const clean = String(spec || '').trim();
+    if (!clean) return;
+    const current = getCustomSpecialties();
+    if (!current.some((s) => s.toLowerCase() === clean.toLowerCase())) {
+      const updated = [...current, clean];
+      localStorage.setItem('hn_custom_specialties', JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hn_specialties_updated', { detail: clean }));
+      }
+    }
+  } catch {}
+}
+
 export function getDeletedDoctorIds() {
   try {
     const raw = localStorage.getItem('hn_deleted_doctor_ids');
@@ -309,7 +367,8 @@ export async function saveCustomHospital(hosp) {
   try {
     const current = getCustomHospitals();
     const cleanName = (hosp.hospital_name || hosp.name || '').trim();
-    const cleanCity = (hosp.city || 'Delhi').trim();
+    const rawCity = (hosp.city || 'Delhi').trim();
+    const cleanCity = SUPPORTED_CITIES.find((c) => c.toLowerCase() === rawCity.toLowerCase()) || rawCity;
     const cleanLoc = (hosp.location || hosp.city || 'City Center').trim();
     let hospId = hosp.hospital_id || `hosp-${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`;
 
@@ -380,7 +439,9 @@ export async function saveCustomDoctor(doc) {
       ? rawName
       : `Dr. ${rawName}`;
     const cleanSpec = (doc.doctor_type || doc.specialization || 'General Medicine').trim();
-    const cleanCity = (doc.city || doc.location || 'Delhi').trim();
+    saveCustomSpecialty(cleanSpec);
+    const rawCity = (doc.city || doc.location || 'Delhi').trim();
+    const cleanCity = SUPPORTED_CITIES.find((c) => c.toLowerCase() === rawCity.toLowerCase()) || rawCity;
     const cleanLoc = (doc.location || doc.city || 'City Center').trim();
     const cleanHosp = (doc.hospital_name || doc.hospital || 'Metro Care Super Specialty Clinic').trim();
     const docFee = doc.fees != null ? Number(doc.fees) : doc.fee != null ? Number(doc.fee) : 800;
