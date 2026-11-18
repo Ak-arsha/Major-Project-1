@@ -175,7 +175,8 @@ export function isDoctorDeleted(doc) {
   const name = String(doc.doctor_name || doc.name || '').toLowerCase().trim();
   const id = String(doc.doctor_id || '').toLowerCase().trim();
   const spec = String(doc.doctor_type || doc.specialization || '').toLowerCase();
-  const hosp = String(doc.hospital_name || doc.hospital || '').toLowerCase();
+  const hosp = String(doc.hospital_name || doc.hospital || '').toLowerCase().trim();
+  const hospId = String(doc.hospital_id || '').toLowerCase().trim();
   const fee = Number(doc.fees || doc.fee || 0);
 
   // Filter the legacy duplicate entries specifically (Gynecologist, 1000 fee, Care Plus)
@@ -186,9 +187,21 @@ export function isDoctorDeleted(doc) {
     return true;
   }
 
+  // If the doctor's affiliated hospital was deleted, this doctor is also deleted
+  if (hospId || hosp) {
+    const deletedHosps = getDeletedHospitalIds();
+    if ((hospId && deletedHosps.includes(hospId)) || (hosp && deletedHosps.includes(hosp))) {
+      return true;
+    }
+  }
+
   const deleted = getDeletedDoctorIds();
   const cleanName = name.replace(/^dr\.?\s*/i, '').trim();
-  return deleted.includes(id) || deleted.includes(cleanName) || deleted.includes(name);
+  return (
+    (id && deleted.includes(id)) ||
+    (cleanName && deleted.includes(cleanName)) ||
+    (name && deleted.includes(name))
+  );
 }
 
 export function isHospitalDeleted(hosp) {
@@ -196,7 +209,10 @@ export function isHospitalDeleted(hosp) {
   const name = String(hosp.hospital_name || hosp.name || '').toLowerCase().trim();
   const id = String(hosp.hospital_id || '').toLowerCase().trim();
   const deleted = getDeletedHospitalIds();
-  return deleted.includes(id) || deleted.includes(name);
+  return (
+    (id && deleted.includes(id)) ||
+    (name && deleted.includes(name))
+  );
 }
 
 export async function deleteDoctor(doctorId, doctorName = '') {
@@ -234,6 +250,26 @@ export async function deleteDoctor(doctorId, doctorName = '') {
       }
     } catch {}
 
+    // Cascade remove all appointments associated with this doctor from persistent localStorage
+    try {
+      const rawBookings = localStorage.getItem('hn_user_bookings');
+      if (rawBookings) {
+        const bookings = JSON.parse(rawBookings);
+        if (Array.isArray(bookings)) {
+          const remainingBookings = bookings.filter((b) => {
+            const bDocId = String(b.doctor_id || '').toLowerCase().trim();
+            const bDocName = String(b.doctor_name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+            if (idStr && bDocId === idStr) return false;
+            if (nameStr && (bDocName === nameStr || bDocName.includes(nameStr) || nameStr.includes(bDocName))) return false;
+            return true;
+          });
+          localStorage.setItem('hn_user_bookings', JSON.stringify(remainingBookings));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to prune doctor appointments from localStorage:', err);
+    }
+
     doctorsCache = null;
 
     // Call backend API DELETE
@@ -246,7 +282,8 @@ export async function deleteDoctor(doctorId, doctorName = '') {
     }
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('hn_doctors_updated', { detail: { removedId: doctorId } }));
+      window.dispatchEvent(new CustomEvent('hn_doctors_updated', { detail: { removedId: doctorId, doctorName } }));
+      window.dispatchEvent(new CustomEvent('hn_appointments_updated', { detail: { doctorId, doctorName } }));
     }
 
     return true;
@@ -265,7 +302,25 @@ export async function deleteHospital(hospitalId, hospitalName = '') {
     const updatedDeleted = Array.from(new Set([...deleted, idStr, nameStr].filter(Boolean)));
     localStorage.setItem('hn_deleted_hospital_ids', JSON.stringify(updatedDeleted));
 
-    // Remove from hn_custom_hospitals
+    // 1. Cascade prune custom doctors affiliated with this hospital and mark those doctors as deleted
+    const customDocs = getCustomDoctors();
+    const deletedDocs = getDeletedDoctorIds();
+    const updatedDeletedDocs = [...deletedDocs];
+
+    const remainingHospsDocs = customDocs.filter((d) => {
+      const dHospId = String(d.hospital_id || '').toLowerCase().trim();
+      const dHospName = String(d.hospital_name || '').toLowerCase().trim();
+      if ((idStr && dHospId === idStr) || (nameStr && dHospName === nameStr)) {
+        if (d.doctor_id) updatedDeletedDocs.push(String(d.doctor_id).toLowerCase().trim());
+        if (d.doctor_name) updatedDeletedDocs.push(String(d.doctor_name).toLowerCase().replace(/^dr\.?\s*/i, '').trim());
+        return false;
+      }
+      return true;
+    });
+    localStorage.setItem('hn_custom_doctors', JSON.stringify(remainingHospsDocs));
+    localStorage.setItem('hn_deleted_doctor_ids', JSON.stringify(Array.from(new Set(updatedDeletedDocs))));
+
+    // 2. Remove from hn_custom_hospitals
     const customHosps = getCustomHospitals();
     const remainingHosps = customHosps.filter(
       (h) =>
@@ -275,7 +330,33 @@ export async function deleteHospital(hospitalId, hospitalName = '') {
     );
     localStorage.setItem('hn_custom_hospitals', JSON.stringify(remainingHosps));
 
+    // 3. Cascade remove all appointments connected to this hospital (or doctors at this hospital)
+    try {
+      const rawBookings = localStorage.getItem('hn_user_bookings');
+      if (rawBookings) {
+        const bookings = JSON.parse(rawBookings);
+        if (Array.isArray(bookings)) {
+          const remainingBookings = bookings.filter((b) => {
+            const bHospId = String(b.hospital_id || '').toLowerCase().trim();
+            const bHospName = String(b.hospital_name || '').toLowerCase().trim();
+            const bDocId = String(b.doctor_id || '').toLowerCase().trim();
+            const bDocName = String(b.doctor_name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+
+            if (idStr && bHospId === idStr) return false;
+            if (nameStr && (bHospName === nameStr || bHospName.includes(nameStr) || nameStr.includes(bHospName))) return false;
+            if (bDocId && updatedDeletedDocs.includes(bDocId)) return false;
+            if (bDocName && updatedDeletedDocs.includes(bDocName)) return false;
+            return true;
+          });
+          localStorage.setItem('hn_user_bookings', JSON.stringify(remainingBookings));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to prune hospital appointments from localStorage:', err);
+    }
+
     hospitalsCache = null;
+    doctorsCache = null;
 
     // Call backend API DELETE
     try {
@@ -287,7 +368,9 @@ export async function deleteHospital(hospitalId, hospitalName = '') {
     }
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('hn_hospitals_updated', { detail: { removedId: hospitalId } }));
+      window.dispatchEvent(new CustomEvent('hn_hospitals_updated', { detail: { removedId: hospitalId, hospitalName } }));
+      window.dispatchEvent(new CustomEvent('hn_doctors_updated', { detail: { hospitalId, hospitalName } }));
+      window.dispatchEvent(new CustomEvent('hn_appointments_updated', { detail: { hospitalId, hospitalName } }));
     }
 
     return true;

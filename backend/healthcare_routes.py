@@ -310,12 +310,12 @@ def create_hospital(payload: HospitalCreateRequest):
 
 @router.delete("/doctors/{doctor_id}")
 def delete_doctor(doctor_id: str):
-    """Delete a doctor and their schedules from the database."""
+    """Delete a doctor, their schedules, and all associated appointments from the database."""
     conn = get_db_connection()
     try:
+        doc_num = None
         if doctor_id.isdigit():
-            conn.execute("DELETE FROM doctor_schedules WHERE doctor_id = ?", (int(doctor_id),))
-            conn.execute("DELETE FROM doctors WHERE doctor_id = ?", (int(doctor_id),))
+            doc_num = int(doctor_id)
         else:
             row = conn.execute(
                 "SELECT doctor_id FROM doctors WHERE composite_doctor_id = ? OR LOWER(doctor_name) = LOWER(?)",
@@ -323,29 +323,49 @@ def delete_doctor(doctor_id: str):
             ).fetchone()
             if row:
                 doc_num = row["doctor_id"]
-                conn.execute("DELETE FROM doctor_schedules WHERE doctor_id = ?", (doc_num,))
-                conn.execute("DELETE FROM doctors WHERE doctor_id = ?", (doc_num,))
-            else:
-                conn.execute("DELETE FROM doctors WHERE composite_doctor_id = ?", (doctor_id,))
+
+        if doc_num is not None:
+            conn.execute("DELETE FROM appointments WHERE doctor_id = ?", (doc_num,))
+            conn.execute("DELETE FROM doctor_schedules WHERE doctor_id = ?", (doc_num,))
+            conn.execute("DELETE FROM doctors WHERE doctor_id = ?", (doc_num,))
+        else:
+            conn.execute("DELETE FROM doctors WHERE composite_doctor_id = ?", (doctor_id,))
 
         conn.commit()
-        return {"success": True, "message": f"Doctor {doctor_id} successfully removed"}
+        return {"success": True, "message": f"Doctor {doctor_id} and associated appointments successfully removed"}
     finally:
         conn.close()
 
 
 @router.delete("/hospitals/{hospital_id}")
 def delete_hospital(hospital_id: str):
-    """Delete a hospital from the database."""
+    """Delete a hospital, affiliated doctors, and all associated appointments from the database."""
     conn = get_db_connection()
     try:
+        h_id = None
         if hospital_id.isdigit():
             h_id = int(hospital_id)
+        else:
+            row = conn.execute(
+                "SELECT hospital_id FROM hospitals WHERE LOWER(hospital_name) = LOWER(?)",
+                (hospital_id.strip(),)
+            ).fetchone()
+            if row:
+                h_id = row["hospital_id"]
+
+        if h_id is not None:
+            # Delete appointments for all doctors in this hospital
+            doc_rows = conn.execute("SELECT doctor_id FROM doctors WHERE hospital_id = ?", (h_id,)).fetchall()
+            for d in doc_rows:
+                d_id = d["doctor_id"]
+                conn.execute("DELETE FROM appointments WHERE doctor_id = ?", (d_id,))
+                conn.execute("DELETE FROM doctor_schedules WHERE doctor_id = ?", (d_id,))
+            conn.execute("DELETE FROM doctors WHERE hospital_id = ?", (h_id,))
             conn.execute("DELETE FROM hospitals WHERE hospital_id = ?", (h_id,))
         else:
             conn.execute("DELETE FROM hospitals WHERE LOWER(hospital_name) = LOWER(?)", (hospital_id.strip(),))
 
         conn.commit()
-        return {"success": True, "message": f"Hospital {hospital_id} successfully removed"}
+        return {"success": True, "message": f"Hospital {hospital_id} and associated clinicians/appointments successfully removed"}
     finally:
         conn.close()

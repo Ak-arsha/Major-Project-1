@@ -156,9 +156,20 @@ export default function Appointments() {
             if (firstDoc.city) setCity(String(firstDoc.city).toLowerCase());
           }
         } else if (docs.length > 0) {
-          setDoctorId(String(docs[0].doctor_id));
-          if (docs[0].hospital_id) setHospitalId(String(docs[0].hospital_id));
-          if (docs[0].city) setCity(String(docs[0].city).toLowerCase());
+          setDoctorId((cur) => {
+            const valid = docs.some((d) => String(d.doctor_id) === String(cur));
+            return valid ? cur : String(docs[0].doctor_id);
+          });
+          setHospitalId((cur) => {
+            const valid = hosps.some((h) => String(h.hospital_id) === String(cur));
+            return valid ? cur : (docs[0].hospital_id ? String(docs[0].hospital_id) : '');
+          });
+          setCity((cur) => {
+            return cur || (docs[0].city ? String(docs[0].city).toLowerCase() : '');
+          });
+        } else {
+          setDoctorId('');
+          setHospitalId('');
         }
       } catch (err) {
         if (active) console.warn('Directory error:', err);
@@ -344,7 +355,13 @@ export default function Appointments() {
     refreshAppointmentsList();
     const handleSync = () => refreshAppointmentsList();
     window.addEventListener('hn_appointments_updated', handleSync);
-    return () => window.removeEventListener('hn_appointments_updated', handleSync);
+    window.addEventListener('hn_doctors_updated', handleSync);
+    window.addEventListener('hn_hospitals_updated', handleSync);
+    return () => {
+      window.removeEventListener('hn_appointments_updated', handleSync);
+      window.removeEventListener('hn_doctors_updated', handleSync);
+      window.removeEventListener('hn_hospitals_updated', handleSync);
+    };
   }, [refreshAppointmentsList]);
 
   const handleCityChange = (nextCity) => {

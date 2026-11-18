@@ -142,7 +142,7 @@ export default function DoctorHospital() {
 
   const handleRemoveDoctor = async (doc) => {
     const docName = doc.doctor_name || 'this doctor';
-    const confirmed = window.confirm(`Are you sure you want to remove ${docName} from the database?`);
+    const confirmed = window.confirm(`Are you sure you want to remove ${docName} from the database? All associated appointments will also be permanently removed.`);
     if (!confirmed) return;
 
     try {
@@ -154,7 +154,7 @@ export default function DoctorHospital() {
             d.doctor_name !== doc.doctor_name
         )
       );
-      setActionNotice(`${docName} was successfully removed.`);
+      setActionNotice(`${docName} and all associated appointments were successfully removed.`);
       setTimeout(() => setActionNotice(''), 4500);
     } catch (err) {
       alert(`Could not remove doctor: ${err.message || err}`);
@@ -163,7 +163,7 @@ export default function DoctorHospital() {
 
   const handleRemoveHospital = async (hosp) => {
     const hospName = hosp.hospital_name || 'this hospital';
-    const confirmed = window.confirm(`Are you sure you want to remove ${hospName} from the database?`);
+    const confirmed = window.confirm(`Are you sure you want to remove ${hospName} from the database? All affiliated clinicians and associated appointments will also be permanently removed.`);
     if (!confirmed) return;
 
     try {
@@ -175,7 +175,14 @@ export default function DoctorHospital() {
             h.hospital_name !== hosp.hospital_name
         )
       );
-      setActionNotice(`${hospName} was successfully removed.`);
+      setDoctorsData((prev) =>
+        prev.filter(
+          (d) =>
+            String(d.hospital_id) !== String(hosp.hospital_id) &&
+            String(d.hospital_name || '').toLowerCase().trim() !== String(hosp.hospital_name || '').toLowerCase().trim()
+        )
+      );
+      setActionNotice(`${hospName} and all associated clinicians and appointments were successfully removed.`);
       setTimeout(() => setActionNotice(''), 4500);
     } catch (err) {
       alert(`Could not remove hospital: ${err.message || err}`);

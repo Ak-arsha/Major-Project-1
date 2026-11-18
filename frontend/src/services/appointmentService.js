@@ -1,4 +1,9 @@
-import { VERIFIED_TESTING_DOCTOR, VERIFIED_TESTING_HOSPITAL } from './healthcareService';
+import {
+  VERIFIED_TESTING_DOCTOR,
+  VERIFIED_TESTING_HOSPITAL,
+  isDoctorDeleted,
+  isHospitalDeleted,
+} from './healthcareService';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
@@ -283,13 +288,28 @@ async function requestJson(url, options = {}) {
 
 export async function getAppointmentStats() {
   try {
-    return await requestJson(`${API_BASE_URL}/api/appointments/stats`);
+    const res = await requestJson(`${API_BASE_URL}/api/appointments/stats`);
+    return res;
   } catch {
-    const bookings = getStoredUserBookings();
+    const isDocActive = (item) =>
+      !isDoctorDeleted({
+        doctor_id: item.doctor_id,
+        doctor_name: item.doctor_name,
+        hospital_id: item.hospital_id,
+        hospital_name: item.hospital_name,
+      }) &&
+      !isHospitalDeleted({
+        hospital_id: item.hospital_id,
+        hospital_name: item.hospital_name,
+      });
+
+    const bookings = getStoredUserBookings().filter(isDocActive);
+    const validHistory = BASELINE_MERGED_CLINIC_HISTORY.filter(isDocActive);
+
     const upcoming = bookings.filter((b) => b.status === 'scheduled' || b.status === 'confirmed').length;
     const completed = bookings.filter((b) => b.status === 'completed' || b.status === 'attended').length;
     return {
-      total_appointments: bookings.length + BASELINE_MERGED_CLINIC_HISTORY.length,
+      total_appointments: bookings.length + validHistory.length,
       upcoming,
       completed,
     };
@@ -482,12 +502,30 @@ export async function getAppointments(filters = {}) {
 
   const rawUserBookings = getStoredUserBookings();
 
-  // Strict patient-level isolation:
+  const isDocActive = (item) =>
+    !isDoctorDeleted({
+      doctor_id: item?.doctor_id,
+      doctor_name: item?.doctor_name,
+      hospital_id: item?.hospital_id,
+      hospital_name: item?.hospital_name,
+    }) &&
+    !isHospitalDeleted({
+      hospital_id: item?.hospital_id,
+      hospital_name: item?.hospital_name,
+    });
+
+  // Strict patient-level isolation & removal of deleted doctor/hospital appointments:
   // An appointment ONLY belongs to the active user if:
-  // 1. If user has a name, and booking has a name, names MUST match.
-  // 2. If user has an email, and booking has an email, emails MUST match.
-  // 3. Under NO circumstances does Alex Sharma or any other user see bookings for "Aadi Jain", "kui kui", etc.
+  // 1. Neither its doctor nor its hospital is deleted from the database.
+  // 2. If user has a name, and booking has a name, names MUST match.
+  // 3. If user has an email, and booking has an email, emails MUST match.
+  // 4. Under NO circumstances does Alex Sharma or any other user see bookings for "Aadi Jain", "kui kui", etc.
   const userBookings = rawUserBookings.filter((b) => {
+    // Cascade removal: if doctor or hospital was removed, drop this appointment!
+    if (!isDocActive(b)) {
+      return false;
+    }
+
     const bEmail = (b.patient_email || '').trim().toLowerCase();
     const bName = (b.patient_name || '').trim().toLowerCase();
 
@@ -527,6 +565,7 @@ export async function getAppointments(filters = {}) {
     const res = await requestJson(`${API_BASE_URL}/api/appointments?${params.toString()}`);
     if (res && Array.isArray(res.appointments)) {
       apiAppointments = res.appointments.filter((a) => {
+        if (!isDocActive(a)) return false;
         const aEmail = (a.patient_email || '').trim().toLowerCase();
         const aName = (a.patient_name || '').trim().toLowerCase();
         if (cleanName && aName && cleanName !== aName) return false;
@@ -545,6 +584,7 @@ export async function getAppointments(filters = {}) {
     const combined = [...apiAppointments];
     const seenRefs = new Set(combined.map((a) => a.booking_reference));
     BASELINE_MERGED_CLINIC_HISTORY.forEach((item) => {
+      if (!isDocActive(item)) return;
       if (!seenRefs.has(item.booking_reference)) {
         combined.push(item);
         seenRefs.add(item.booking_reference);
@@ -575,9 +615,9 @@ export async function getAppointments(filters = {}) {
       if (!map.has(ref)) map.set(ref, a);
     });
 
-    const list = Array.from(map.values()).sort((a, b) =>
-      b.appointment_date.localeCompare(a.appointment_date)
-    );
+    const list = Array.from(map.values())
+      .filter(isDocActive)
+      .sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
 
     return {
       total: list.length,
@@ -601,9 +641,9 @@ export async function getAppointments(filters = {}) {
     if (!map.has(ref)) map.set(ref, a);
   });
 
-  const list = Array.from(map.values()).sort((a, b) =>
-    a.appointment_date.localeCompare(b.appointment_date)
-  );
+  const list = Array.from(map.values())
+    .filter(isDocActive)
+    .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
 
   return {
     total: list.length,
