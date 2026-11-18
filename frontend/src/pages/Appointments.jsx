@@ -55,11 +55,20 @@ export default function Appointments() {
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   const [slot, setSlot] = useState('');
-  const [patientName, setPatientName] = useState('');
-  const [patientPhone, setPatientPhone] = useState('');
-  const [patientAge, setPatientAge] = useState('');
-  const [patientSex, setPatientSex] = useState('');
+  const [patientName, setPatientName] = useState(user?.name || '');
+  const [patientPhone, setPatientPhone] = useState(user?.phone || '');
+  const [patientAge, setPatientAge] = useState(user?.age || '');
+  const [patientSex, setPatientSex] = useState(user?.sex || 'Female');
   const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      if (user.name && !patientName) setPatientName(user.name);
+      if (user.phone && !patientPhone) setPatientPhone(user.phone);
+      if (user.age && !patientAge) setPatientAge(user.age);
+      if (user.sex && !patientSex) setPatientSex(user.sex);
+    }
+  }, [user]);
 
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState('');
@@ -120,7 +129,20 @@ export default function Appointments() {
 
         // Preselect from navigation state or pick first doctor cleanly
         if (state?.doctorId) {
-          const matched = docs.find((d) => String(d.doctor_id) === String(state.doctorId));
+          let matched = docs.find((d) => String(d.doctor_id) === String(state.doctorId));
+          if (!matched && state.doctorName) {
+            matched = {
+              doctor_id: state.doctorId,
+              doctor_name: state.doctorName,
+              doctor_type: state.specialization || 'Specialist',
+              hospital_id: state.hospitalId || 1,
+              hospital_name: state.hospitalName || 'Care Plus Hospital',
+              city: state.city || 'Delhi',
+              fees: state.fees != null ? Number(state.fees) : 600,
+            };
+            docs = [matched, ...docs];
+            setDoctorsData(docs);
+          }
           if (matched) {
             setDoctorId(String(matched.doctor_id));
             if (matched.hospital_id) setHospitalId(String(matched.hospital_id));
@@ -272,16 +294,16 @@ export default function Appointments() {
     }
   }, [doctorId, selectedDate, refreshSlots]);
 
-  // Load appointments list for active tab
+  // Load appointments list for active tab filtered by current patient
   const refreshAppointmentsList = useCallback(async () => {
     try {
       setLoadingList(true);
-      const filters =
-        tab === 'upcoming'
-          ? { status: 'upcoming', limit: 50 }
-          : tab === 'past'
-          ? { status: 'past', source: 'user_booking', limit: 50 }
-          : { source: 'medscheduler_merged', limit: 30 };
+      const filters = {
+        status: tab === 'past' ? 'past' : 'upcoming',
+        patient_email: user?.email,
+        patient_name: user?.name,
+        limit: 50,
+      };
 
       const res = await getAppointments(filters);
       setAppointmentsList(res.appointments || []);
@@ -291,7 +313,7 @@ export default function Appointments() {
     } finally {
       setLoadingList(false);
     }
-  }, [tab]);
+  }, [tab, user]);
 
   useEffect(() => {
     refreshAppointmentsList();
@@ -340,26 +362,31 @@ export default function Appointments() {
     setSubmitting(true);
     try {
       const parsedAge = patientAge.trim() ? Number(patientAge.trim()) : 28;
+      const consultationFee = selectedDoctor?.fees != null ? Number(selectedDoctor.fees) : 600;
       const res = await bookAppointment({
         doctor_id: isNaN(Number(doctorId)) ? doctorId : Number(doctorId),
-        doctor_name: selectedDoctor?.doctor_name,
-        doctor_type: selectedDoctor?.doctor_type || selectedDoctor?.specialization,
-        hospital_id: selectedDoctor?.hospital_id,
-        hospital_name: selectedDoctor?.hospital_name,
-        city: selectedDoctor?.city,
+        doctor_name: selectedDoctor?.doctor_name || state?.doctorName || 'Dr. Specialist',
+        doctor_type: selectedDoctor?.doctor_type || selectedDoctor?.specialization || 'Specialist',
+        hospital_id: selectedDoctor?.hospital_id || 1,
+        hospital_name: selectedDoctor?.hospital_name || state?.hospitalName || 'Care Plus Hospital',
+        city: selectedDoctor?.city || state?.city || 'Delhi',
+        fee: consultationFee,
+        fees: consultationFee,
+        payment_mode: 'Pay at Clinic',
+        payment_status: 'Pay at OPD Counter',
         appointment_date: selectedDate,
         appointment_time: slot,
         patient_name: patientName.trim(),
         patient_email: user?.email || 'patient@healthnavigator.ai',
-        patient_phone: patientPhone.trim() || '+91 98765 43210',
+        patient_phone: patientPhone.trim() || user?.phone || '+91 98765 43210',
         patient_age: parsedAge,
-        patient_sex: patientSex || 'Female',
+        patient_sex: patientSex || user?.sex || 'Female',
         reason: reason.trim() || 'General Medical Consultation',
       });
 
       const booked = res.appointment;
       setToast(
-        `Confirmed (${booked.booking_reference}): ${booked.doctor_name} on ${booked.appointment_date} at ${booked.display_time}.`
+        `Confirmed (${booked.booking_reference}): ${booked.doctor_name} on ${booked.appointment_date} at ${booked.display_time}. Consultation fee: ₹${consultationFee} (Payable at clinic OPD counter).`
       );
       setSlot('');
       setReason('');
@@ -466,7 +493,7 @@ export default function Appointments() {
         description="Book real OPD slots merged from the Medscheduler outpatient calendar with our verified Indian doctors database."
       />
 
-      {/* Role-Based Session Banner */}
+      {/* Patient Portal Banner */}
       <div
         style={{
           display: 'flex',
@@ -476,27 +503,20 @@ export default function Appointments() {
           gap: '0.75rem',
           padding: '0.85rem 1.25rem',
           borderRadius: 'var(--r-md)',
-          background: role === ROLES.DOCTOR ? '#ecfdf5' : '#eef2ff',
-          border: `1px solid ${role === ROLES.DOCTOR ? '#a7f3d0' : '#c7d2fe'}`,
+          background: '#eef2ff',
+          border: '1px solid #c7d2fe',
           marginBottom: '1.25rem',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          {role === ROLES.DOCTOR ? (
-            <Stethoscope size={18} style={{ color: '#047857' }} />
-          ) : (
-            <User size={18} style={{ color: '#4338ca' }} />
-          )}
+          <User size={18} style={{ color: '#4338ca' }} />
           <span style={{ fontSize: '0.875rem', color: 'var(--navy-900)' }}>
-            Signed in as <strong>{user?.name}</strong> (
-            <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{role}</span>
-            )
-            {role === ROLES.PATIENT && ' — Patient profile details are auto-filled for faster booking'}
-            {role === ROLES.DOCTOR && ' — Reviewing outpatient consultations & OPD slots'}
+            Signed in as <strong>{user?.name || 'Patient'}</strong>
+            {' '}— Patient profile details are auto-filled for faster OPD booking
           </span>
         </div>
-        <span className={`role-badge role-badge--${role || 'patient'}`}>
-          {role} portal
+        <span className="role-badge role-badge--patient">
+          Patient Portal
         </span>
       </div>
 
@@ -747,8 +767,21 @@ export default function Appointments() {
               </dd>
             </div>
             <div>
-              <dt>Fee</dt>
-              <dd>{selectedDoctor?.fees != null ? `₹${selectedDoctor.fees}` : '—'}</dd>
+              <dt>Consultation Fee</dt>
+              <dd>
+                <strong style={{ color: '#047857', fontSize: '1.05rem' }}>
+                  {selectedDoctor?.fees != null ? `₹${selectedDoctor.fees}` : '₹600'}
+                </strong>
+                <small style={{ display: 'block', fontSize: '0.725rem', color: 'var(--ink-soft)', marginTop: '2px' }}>
+                  Payable at Clinic / OPD Counter
+                </small>
+              </dd>
+            </div>
+            <div>
+              <dt>Payment Mode</dt>
+              <dd style={{ fontSize: '0.85rem' }}>
+                Pay at Hospital Counter (Cash / UPI)
+              </dd>
             </div>
             <div>
               <dt>Date</dt>
@@ -778,8 +811,8 @@ export default function Appointments() {
             <CalendarCheck2 size={17} />
             {submitting ? 'Confirming…' : 'Confirm appointment'}
           </button>
-          <small className="muted">
-            Persisted to SQLite with double-booking prevention and real slot release on cancellation.
+          <small className="muted" style={{ display: 'block', textAlign: 'center', marginTop: '0.5rem' }}>
+            Pay ₹{selectedDoctor?.fees != null ? selectedDoctor.fees : 600} at hospital OPD reception on visit.
           </small>
         </aside>
       </div>
@@ -787,13 +820,12 @@ export default function Appointments() {
       <section className="section" aria-labelledby="hist-h">
         <div className="section__head">
           <h2 id="hist-h">
-            Appointments <span className="count">{appointmentsTotal}</span>
+            My Appointments <span className="count">{appointmentsTotal}</span>
           </h2>
           <div className="segmented" role="tablist">
             {[
               ['upcoming', 'Upcoming'],
               ['past', 'Past / Cancelled'],
-              ['merged', 'Merged Clinic History'],
             ].map(([id, label]) => (
               <button
                 key={id}
@@ -813,11 +845,11 @@ export default function Appointments() {
         ) : appointmentsList.length === 0 ? (
           <div className="empty empty--inline">
             <CalendarX2 size={28} aria-hidden="true" />
-            <h3>No {tab === 'upcoming' ? 'upcoming' : tab === 'past' ? 'past' : 'merged'} appointments</h3>
+            <h3>No {tab === 'upcoming' ? 'upcoming' : 'past'} appointments</h3>
             <p>
               {tab === 'upcoming'
-                ? 'Book a slot above and it will appear here immediately.'
-                : 'No records match this filter yet.'}
+                ? 'Select a doctor and OPD slot above to book your appointment.'
+                : 'No past or cancelled appointments for your account.'}
             </p>
           </div>
         ) : (
@@ -838,6 +870,14 @@ export default function Appointments() {
                       {formatTitle(a.city)} · Patient: <strong>{a.patient_name}</strong> · Ref:{' '}
                       <code>{a.booking_reference}</code>
                     </small>
+                    <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.75rem', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 600 }}>
+                        Fee: ₹{a.fee || a.fees || 600} · Pay at Clinic
+                      </span>
+                      <span style={{ fontSize: '0.75rem', background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '0.15rem 0.5rem', borderRadius: '4px' }}>
+                        OPD Counter Payment
+                      </span>
+                    </div>
                     {a.rejectionReason && (
                       <small style={{ display: 'block', color: '#b91c1c', marginTop: '0.2rem', fontWeight: 500 }}>
                         Note: {a.rejectionReason}

@@ -1,44 +1,38 @@
-# Healthcare Navigator – Agentic AI Multi-Agent Care Assistant
+# Healthcare Navigator – Agentic AI Care Assistant (Patient Portal)
 
 > **Major Project (Semester 7)**  
-> **Repository:** [https://github.com/Janediaa/major_project_sem7](https://github.com/Janediaa/major_project_sem7)
+> **Repository:** [https://github.com/Ak-arsha/Major-Project-1](https://github.com/Ak-arsha/Major-Project-1)
 
-Healthcare Navigator is an intelligent healthcare assistant and multi-agent coordination system. It unifies doctor & hospital discovery, automated outpatient appointment booking, WHO-grounded medical question answering (RAG), clinical triage guidance, and an IRDAI-indexed health insurance policy navigator into a single, cohesive clinical interface.
+Healthcare Navigator is an intelligent healthcare assistant and multi-agent coordination system tailored for patient outpatient care. It unifies verified Indian doctor & hospital discovery, automated OPD appointment booking with consultation fee transparency, WHO-grounded medical question answering (RAG), clinical triage guidance, and an IRDAI-indexed health insurance policy navigator into a single, polished patient interface.
 
 ---
 
 ## 🌟 Key Features
 
-### 1. 🔐 Role-Based Authentication & Authorization (RBAC)
-- **Dedicated Authentication Gate:** Clean, modern login and registration portal at `/login` protecting the entire healthcare workspace.
-- **Role Clearance & Personas:**
-  - **👤 Patient (`patient`):** Discover doctors/hospitals, check symptoms, review insurance coverage, and book real outpatient slots with auto-filled patient profiles.
-  - **🩺 Doctor (`doctor`):** Clinical provider portal with direct schedule inspection, patient consultation records, and outpatient slot review.
-  - **🛡️ Hospital Admin (`admin`):** System-wide administrative oversight, all appointment management, doctor coverage stats, and RAG vector intelligence monitoring.
-- **🚀 One-Click Demo Logins:** Instant evaluation accounts built directly into the login screen:
-  - **Patient:** Alex Sharma (`patient@healthnavigator.ai`)
-  - **Doctor:** Dr. Sarah Jenkins – Cardiologist (`dr.jenkins@healthnavigator.ai`)
-  - **Admin:** Dr. Raymond Holt – System Admin (`admin@healthnavigator.ai`)
-- **Session Management:** Persistent localStorage session management with user initials avatar, role badge pills, in-app role switcher for evaluators, and clean sign-out controls in both Topbar and Sidebar.
+### 1. 🔐 Patient Portal Authentication & Session Gate
+- **Dedicated Patient Authentication:** Secure sign-in and account registration at `/login` protecting personal patient health workflows.
+- **Strict Credential Validation:** Only registered patient accounts (or the one-click evaluation demo patient) can authenticate; unregistered logins require account creation.
+- **Isolated User Sessions:** Each registered patient has an independent, private session. Booked appointments and consultation details remain private to the patient.
+- **🚀 One-Click Demo Access:** Instant evaluation login for demo patient **Alex Sharma** (`patient@healthnavigator.ai`).
 
 ### 2. 🩺 Doctor & Hospital Discovery
-- Search over 4,000+ verified Indian doctors and hospitals across multiple specialties and cities.
-- Filter by city (Delhi, Mumbai, Bengaluru, etc.), medical specialization, or keyword.
-- Real-time hospital association and consultation fees breakdown.
+- Search over 4,000+ verified Indian doctors and hospitals across specialties and cities.
+- Filter by city (Delhi, Mumbai, Bengaluru, Ahmedabad, etc.), specialty, or hospital name.
+- Transparent display of consultation fees (e.g. ₹500, ₹800, ₹1000).
 
-### 3. 📅 Outpatient Appointment Scheduling
-- Integrated with outpatient scheduling calendars with real OPD timing windows and slot durations.
-- Real-time slot availability, conflict detection, booking confirmations with booking reference tokens, rescheduling, and cancellation tracking.
+### 3. 📅 Outpatient (OPD) Appointment Scheduling & Fee Breakdown
+- 7-day OPD availability calendar with slot capacity tracking and real-time selection.
+- **Consultation Fee & Payment Transparency:** Clear fee breakdown during booking (OPD consultation fee, ₹0 platform fee, payment payable at hospital OPD counter upon arrival via Cash/UPI).
+- **Patient Scoping:** Patients view only their own active and past appointments.
+- Double-booking prevention and instant slot release upon cancellation or rescheduling.
 
 ### 4. 📚 Medical Knowledge Assistant (WHO-Grounded RAG)
 - Query-answering agent grounded in World Health Organization (WHO) medical literature.
-- Delivers evidence-based guidance with citations, publications, and external references.
-- Gemini REST integration with fast retrieval fallback.
+- Delivers evidence-based guidance with citations and clinical references.
 
 ### 5. 🛡️ Insurance Navigator & Policy Finder
 - Search and compare Indian health insurance policies indexed from IRDAI regulatory filings.
-- Detailed facts on pre-existing condition (PED) waiting periods, initial waiting periods, copayment terms, and deductible limits.
-- Interactive PDF policy document analysis.
+- Comprehensive policy details (sum insured options, PED waiting periods, copay terms, and network benefits) with reliable local fallback.
 
 ### 6. 🚨 Emergency Clinical Triage
 - Symptom assessment engine providing clear guidance on urgency levels (Emergency, Urgent Care, Routine Visit, or Home Care).

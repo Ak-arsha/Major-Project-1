@@ -56,6 +56,10 @@ export const BASELINE_USER_BOOKINGS = [
     reason: 'Persistent dry cough and mild breathlessness',
     status: 'scheduled',
     rejectionReason: '',
+    fee: 800,
+    fees: 800,
+    payment_mode: 'Pay at Clinic',
+    payment_status: 'Pay at OPD Counter',
     source: 'user_booking',
     created_at: new Date().toISOString(),
   },
@@ -79,6 +83,10 @@ export const BASELINE_USER_BOOKINGS = [
     reason: 'Annual respiratory screening & spirometry review',
     status: 'completed',
     rejectionReason: '',
+    fee: 800,
+    fees: 800,
+    payment_mode: 'Pay at Clinic',
+    payment_status: 'Pay at OPD Counter',
     source: 'user_booking',
     created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
   },
@@ -102,6 +110,10 @@ export const BASELINE_USER_BOOKINGS = [
     reason: 'Routine seasonal allergy follow-up',
     status: 'cancelled',
     rejectionReason: 'Cancelled by patient due to travel conflict',
+    fee: 800,
+    fees: 800,
+    payment_mode: 'Pay at Clinic',
+    payment_status: 'Pay at OPD Counter',
     source: 'user_booking',
     created_at: new Date(Date.now() - 14 * 86400000).toISOString(),
   },
@@ -239,85 +251,10 @@ export function saveStoredUserBookings(bookings) {
   }
 }
 
-// Sync a patient booking into doctor portal appointments
-export function syncBookingToDoctorPortal(booking) {
-  try {
-    const raw = localStorage.getItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS);
-    const current = raw ? JSON.parse(raw) : [];
-    const docAppt = {
-      id: `usr-${booking.appointment_id || booking.booking_reference}`,
-      backendId: booking.backend_id || null,
-      bookingReference: booking.booking_reference,
-      date: booking.appointment_date,
-      time: booking.display_time || booking.appointment_time,
-      patient: booking.patient_name || 'Patient',
-      age: booking.patient_age || 28,
-      gender: booking.patient_sex || 'Female',
-      reason: booking.reason || 'General Medical Consultation',
-      status: booking.status === 'cancelled' ? 'rejected' : booking.status === 'completed' ? 'completed' : 'pending',
-      notes: booking.reason || 'Booked online via patient portal.',
-      requested: 'Just now',
-      rejectionReason: booking.rejectionReason || '',
-      phone: booking.patient_phone || '+91 98765 43210',
-      source: 'user_booking',
-    };
-    const filtered = current.filter(
-      (a) => a.bookingReference !== booking.booking_reference && a.id !== docAppt.id
-    );
-    const updated = [docAppt, ...filtered];
-    localStorage.setItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS, JSON.stringify(updated));
-  } catch (err) {
-    console.warn('Failed to sync booking to doctor portal:', err);
-  }
-}
-
-// Sync a cancellation to doctor portal
-export function syncCancellationToDoctorPortal(appointmentId, reason = 'Cancelled by patient') {
-  try {
-    const raw = localStorage.getItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS);
-    if (!raw) return;
-    const current = JSON.parse(raw);
-    const updated = current.map((a) => {
-      const match =
-        a.id === `usr-${appointmentId}` ||
-        a.id === appointmentId ||
-        a.bookingReference === appointmentId ||
-        String(a.backendId) === String(appointmentId);
-      return match
-        ? { ...a, status: 'rejected', rejectionReason: reason, requested: null }
-        : a;
-    });
-    localStorage.setItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS, JSON.stringify(updated));
-  } catch (err) {
-    console.warn('Failed to sync cancellation to doctor portal:', err);
-  }
-}
-
-// Sync a reschedule to doctor portal
-export function syncRescheduleToDoctorPortal(booking) {
-  try {
-    const raw = localStorage.getItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS);
-    if (!raw) return;
-    const current = JSON.parse(raw);
-    const updated = current.map((a) => {
-      const match =
-        a.bookingReference === booking.booking_reference ||
-        a.id === `usr-${booking.appointment_id}` ||
-        String(a.backendId) === String(booking.appointment_id);
-      return match
-        ? {
-            ...a,
-            date: booking.appointment_date,
-            time: booking.display_time || booking.appointment_time,
-            status: 'confirmed',
-          }
-        : a;
-    });
-    localStorage.setItem(APPOINTMENT_STORAGE_KEYS.DOCTOR_APPOINTMENTS, JSON.stringify(updated));
-  } catch (err) {
-    console.warn('Failed to sync reschedule to doctor portal:', err);
-  }
-}
+// Doctor sync no-ops (doctor portal decoupled)
+export function syncBookingToDoctorPortal() {}
+export function syncCancellationToDoctorPortal() {}
+export function syncRescheduleToDoctorPortal() {}
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
@@ -523,9 +460,38 @@ export async function getDoctorSlots(doctorId, date) {
   };
 }
 
-// Fetch unified appointments partitioned by active tab (upcoming / past / merged)
+// Fetch unified appointments partitioned by active tab (upcoming / past)
 export async function getAppointments(filters = {}) {
-  const userBookings = getStoredUserBookings();
+  let userEmail = filters.patient_email;
+  let userName = filters.patient_name;
+
+  if (!userEmail) {
+    try {
+      const stored = localStorage.getItem('hn_auth_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        userEmail = u?.email;
+        userName = u?.name;
+      }
+    } catch {}
+  }
+
+  const cleanEmail = (userEmail || '').trim().toLowerCase();
+  const cleanName = (userName || '').trim().toLowerCase();
+  const isDemoAlex = cleanEmail === 'patient@healthnavigator.ai' || (!cleanEmail && !cleanName);
+
+  const rawUserBookings = getStoredUserBookings();
+
+  // Filter bookings strictly for the current patient:
+  // If demo Alex Sharma, include baseline bookings plus any bookings created under Alex's email/name.
+  // If custom registered patient, ONLY include bookings made with their email or name!
+  const userBookings = rawUserBookings.filter((b) => {
+    const bEmail = (b.patient_email || '').trim().toLowerCase();
+    const bName = (b.patient_name || '').trim().toLowerCase();
+    if (cleanEmail && bEmail) return bEmail === cleanEmail;
+    if (cleanName && bName) return bName === cleanName;
+    return isDemoAlex;
+  });
 
   // Try fetching live backend appointments
   let apiAppointments = [];
@@ -540,13 +506,19 @@ export async function getAppointments(filters = {}) {
 
     const res = await requestJson(`${API_BASE_URL}/api/appointments?${params.toString()}`);
     if (res && Array.isArray(res.appointments)) {
-      apiAppointments = res.appointments;
+      apiAppointments = res.appointments.filter((a) => {
+        const aEmail = (a.patient_email || '').trim().toLowerCase();
+        const aName = (a.patient_name || '').trim().toLowerCase();
+        if (cleanEmail && aEmail) return aEmail === cleanEmail;
+        if (cleanName && aName) return aName === cleanName;
+        return isDemoAlex && (aName === 'alex sharma' || aEmail === 'patient@healthnavigator.ai');
+      });
     }
   } catch (err) {
     console.info('Backend appointments fetch degraded, using persistent cache:', err.message);
   }
 
-  // Filter 1: Merged clinic history
+  // Filter 1: Merged clinic history (legacy dataset view)
   if (filters.source === 'medscheduler_merged') {
     const combined = [...apiAppointments];
     const seenRefs = new Set(combined.map((a) => a.booking_reference));
@@ -623,19 +595,26 @@ export async function bookAppointment(payload) {
   const appointmentId = `appt-${Date.now()}`;
   const displayTime = formatDisplayTime(payload.appointment_time);
 
-  const isTestingDoc =
-    String(payload.doctor_id) === String(VERIFIED_TESTING_DOCTOR.doctor_id) ||
-    String(payload.doctor_name || '').toLowerCase().includes('ananya rao');
+  const feeAmount =
+    payload.fee != null
+      ? Number(payload.fee)
+      : payload.fees != null
+      ? Number(payload.fees)
+      : 600;
 
   const newBooking = {
     appointment_id: appointmentId,
     booking_reference: bookingRef,
-    doctor_id: payload.doctor_id || (isTestingDoc ? VERIFIED_TESTING_DOCTOR.doctor_id : 1),
-    doctor_name: isTestingDoc ? VERIFIED_TESTING_DOCTOR.doctor_name : payload.doctor_name || 'Dr. Ananya Rao',
-    doctor_type: isTestingDoc ? VERIFIED_TESTING_DOCTOR.doctor_type : payload.doctor_type || 'Pulmonology',
-    hospital_id: isTestingDoc ? VERIFIED_TESTING_HOSPITAL.hospital_id : payload.hospital_id || 'hosp-sunrise-chest',
-    hospital_name: isTestingDoc ? VERIFIED_TESTING_HOSPITAL.hospital_name : payload.hospital_name || 'Sunrise Chest & Allergy Clinic',
-    city: payload.city || (isTestingDoc ? 'Delhi' : 'Delhi'),
+    doctor_id: payload.doctor_id || 1,
+    doctor_name: payload.doctor_name || 'Dr. Specialist',
+    doctor_type: payload.doctor_type || 'General Medicine',
+    hospital_id: payload.hospital_id || 1,
+    hospital_name: payload.hospital_name || 'Care Plus Super Specialty Hospital',
+    city: payload.city || 'Delhi',
+    fee: feeAmount,
+    fees: feeAmount,
+    payment_mode: 'Pay at Clinic',
+    payment_status: 'Pay at OPD Counter',
     appointment_date: payload.appointment_date,
     appointment_time: payload.appointment_time,
     display_time: displayTime,
@@ -656,7 +635,16 @@ export async function bookAppointment(payload) {
     const res = await requestJson(`${API_BASE_URL}/api/appointments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        doctor_id: typeof payload.doctor_id === 'number' ? payload.doctor_id : 1,
+        appointment_date: payload.appointment_date,
+        appointment_time: payload.appointment_time,
+        patient_name: payload.patient_name,
+        patient_phone: payload.patient_phone,
+        patient_age: payload.patient_age,
+        patient_sex: payload.patient_sex,
+        reason: payload.reason,
+      }),
     });
     if (res && res.appointment) {
       newBooking.backend_id = res.appointment.appointment_id;
@@ -672,9 +660,6 @@ export async function bookAppointment(payload) {
   const current = getStoredUserBookings();
   const updated = [newBooking, ...current.filter((b) => b.booking_reference !== newBooking.booking_reference)];
   saveStoredUserBookings(updated);
-
-  // Sync to doctor portal appointments
-  syncBookingToDoctorPortal(newBooking);
 
   // Dispatch live update event
   if (typeof window !== 'undefined') {

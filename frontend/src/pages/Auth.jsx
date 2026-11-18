@@ -9,7 +9,6 @@ import {
   Mail,
   Phone,
   Sparkles,
-  Stethoscope,
   User,
   UserCheck,
 } from 'lucide-react';
@@ -23,17 +22,12 @@ export default function Auth() {
   const location = useLocation();
 
   const [mode, setMode] = useState('login'); // 'login' | 'register'
-  const [selectedRole, setSelectedRole] = useState(ROLES.PATIENT);
 
   // Form Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [specialization, setSpecialization] = useState('Cardiology');
-  const [hospital, setHospital] = useState('Care Plus Super Specialty Clinic');
-  const [city, setCity] = useState('Delhi');
-  const [fee, setFee] = useState('800');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('Female');
 
@@ -44,14 +38,9 @@ export default function Auth() {
 
   const destination = location.state?.from?.pathname || '/';
 
-  const getDestination = (roleKey) => {
-    if (destination && destination !== '/') return destination;
-    return roleKey === ROLES.DOCTOR ? '/doctor' : '/';
-  };
-
-  const handleDemoSelect = (roleKey) => {
-    loginAsDemo(roleKey);
-    navigate(getDestination(roleKey), { replace: true });
+  const handleDemoSelect = () => {
+    loginAsDemo();
+    navigate(destination, { replace: true });
   };
 
   const handleLoginSubmit = async (e) => {
@@ -65,8 +54,8 @@ export default function Auth() {
 
     setSubmitting(true);
     try {
-      const res = await login(email, password, selectedRole);
-      navigate(getDestination(res.user?.role || selectedRole), { replace: true });
+      await login(email, password);
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message || 'Unable to sign in. Please verify your details.');
     } finally {
@@ -93,20 +82,15 @@ export default function Auth() {
 
     setSubmitting(true);
     try {
-      const res = await register({
+      await register({
         name,
         email,
         password,
-        role: selectedRole,
         phone,
-        specialization: selectedRole === ROLES.DOCTOR ? specialization : '',
-        hospital: selectedRole === ROLES.DOCTOR ? hospital : '',
-        city: selectedRole === ROLES.DOCTOR ? city : '',
-        fee: selectedRole === ROLES.DOCTOR ? Number(fee) || 750 : 750,
-        age: selectedRole === ROLES.PATIENT ? age : '',
-        sex: selectedRole === ROLES.PATIENT ? sex : '',
+        age,
+        sex,
       });
-      navigate(getDestination(res.user?.role || selectedRole), { replace: true });
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -124,8 +108,7 @@ export default function Auth() {
           </div>
           <h1>Healthcare Navigator</h1>
           <p>
-            Agentic AI care assistant coordinating doctor discovery, verified appointments, WHO
-            triage &amp; insurance intelligence.
+            Patient Care Portal — Doctor discovery, OPD appointment booking, WHO triage &amp; insurance intelligence.
           </p>
         </header>
 
@@ -133,36 +116,26 @@ export default function Auth() {
         <section className="auth-demo-section" aria-label="One-click demo login">
           <div className="auth-demo-label">
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              <Sparkles size={14} /> One-Click Evaluation Logins
+              <Sparkles size={14} /> Quick Demo Access
             </span>
-            <span className="auth-demo-badge">Fast Access</span>
+            <span className="auth-demo-badge">Instant Login</span>
           </div>
 
-          <div className="auth-demo-grid">
+          <div className="auth-demo-grid" style={{ gridTemplateColumns: '1fr' }}>
             <button
               type="button"
               className="auth-demo-btn auth-demo-btn--patient"
-              onClick={() => handleDemoSelect(ROLES.PATIENT)}
-              title="Sign in as Patient Alex Sharma"
+              onClick={handleDemoSelect}
+              title="Sign in as Demo Patient (Alex Sharma)"
+              style={{ justifyContent: 'center' }}
             >
               <div className="auth-demo-btn__icon">
                 <User size={16} />
               </div>
-              <strong>Patient</strong>
-              <span>Alex Sharma</span>
-            </button>
-
-            <button
-              type="button"
-              className="auth-demo-btn auth-demo-btn--doctor"
-              onClick={() => handleDemoSelect(ROLES.DOCTOR)}
-              title="Sign in as Dr. Ananya Rao (Pulmonologist)"
-            >
-              <div className="auth-demo-btn__icon">
-                <Stethoscope size={16} />
+              <div style={{ textAlign: 'left' }}>
+                <strong>Patient Demo Account</strong>
+                <span>Alex Sharma (patient@healthnavigator.ai)</span>
               </div>
-              <strong>Doctor</strong>
-              <span>Dr. Ananya Rao</span>
             </button>
           </div>
         </section>
@@ -246,40 +219,19 @@ export default function Auth() {
               </div>
             </div>
 
-            <div className="auth-field">
-              <label>Role</label>
-              <div className="auth-role-grid">
-                <button
-                  type="button"
-                  className={`auth-role-card ${selectedRole === ROLES.PATIENT ? 'auth-role-card--active' : ''}`}
-                  onClick={() => setSelectedRole(ROLES.PATIENT)}
-                >
-                  <User size={16} />
-                  <strong>Patient</strong>
-                  <small>Care seeker</small>
-                </button>
-
-                <button
-                  type="button"
-                  className={`auth-role-card ${selectedRole === ROLES.DOCTOR ? 'auth-role-card--active' : ''}`}
-                  onClick={() => setSelectedRole(ROLES.DOCTOR)}
-                >
-                  <Stethoscope size={16} />
-                  <strong>Doctor</strong>
-                  <small>Care provider</small>
-                </button>
-              </div>
-            </div>
-
-            <button type="submit" className="auth-submit-btn" disabled={submitting}>
-              {submitting ? 'Signing In...' : 'Sign In to Portal'}
+            <button
+              type="submit"
+              className="btn btn--primary auth-submit"
+              disabled={submitting}
+            >
+              <span>{submitting ? 'Signing in...' : 'Sign In to Patient Portal'}</span>
               <ArrowRight size={16} />
             </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleRegisterSubmit}>
             <div className="auth-field">
-              <label htmlFor="reg-name">Full Name</label>
+              <label htmlFor="reg-name">Full Name *</label>
               <div className="auth-input-wrap">
                 <User size={16} className="auth-input-icon" />
                 <input
@@ -287,7 +239,7 @@ export default function Auth() {
                   type="text"
                   required
                   className="auth-input"
-                  placeholder="e.g. Alex Sharma"
+                  placeholder="e.g. John Doe"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -295,7 +247,7 @@ export default function Auth() {
             </div>
 
             <div className="auth-field">
-              <label htmlFor="reg-email">Email Address</label>
+              <label htmlFor="reg-email">Email Address *</label>
               <div className="auth-input-wrap">
                 <Mail size={16} className="auth-input-icon" />
                 <input
@@ -303,7 +255,7 @@ export default function Auth() {
                   type="email"
                   required
                   className="auth-input"
-                  placeholder="e.g. alex@example.com"
+                  placeholder="e.g. john@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -311,30 +263,16 @@ export default function Auth() {
             </div>
 
             <div className="auth-field">
-              <label htmlFor="reg-phone">Phone Number (Optional)</label>
-              <div className="auth-input-wrap">
-                <Phone size={16} className="auth-input-icon" />
-                <input
-                  id="reg-phone"
-                  type="tel"
-                  className="auth-input"
-                  placeholder="+91 98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="auth-field">
-              <label htmlFor="reg-password">Password</label>
+              <label htmlFor="reg-password">Password (min 6 characters) *</label>
               <div className="auth-input-wrap">
                 <Lock size={16} className="auth-input-icon" />
                 <input
                   id="reg-password"
                   type={showPassword ? 'text' : 'password'}
                   required
+                  minLength={6}
                   className="auth-input"
-                  placeholder="At least 6 characters"
+                  placeholder="Choose a secure password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -350,133 +288,60 @@ export default function Auth() {
             </div>
 
             <div className="auth-field">
-              <label>Select Your Account Type</label>
-              <div className="auth-role-grid">
-                <button
-                  type="button"
-                  className={`auth-role-card ${selectedRole === ROLES.PATIENT ? 'auth-role-card--active' : ''}`}
-                  onClick={() => setSelectedRole(ROLES.PATIENT)}
-                >
-                  <User size={16} />
-                  <strong>Patient</strong>
-                  <small>Book &amp; search</small>
-                </button>
-
-                <button
-                  type="button"
-                  className={`auth-role-card ${selectedRole === ROLES.DOCTOR ? 'auth-role-card--active' : ''}`}
-                  onClick={() => setSelectedRole(ROLES.DOCTOR)}
-                >
-                  <Stethoscope size={16} />
-                  <strong>Doctor</strong>
-                  <small>Manage clinic</small>
-                </button>
+              <label htmlFor="reg-phone">Phone Number</label>
+              <div className="auth-input-wrap">
+                <Phone size={16} className="auth-input-icon" />
+                <input
+                  id="reg-phone"
+                  type="tel"
+                  className="auth-input"
+                  placeholder="e.g. +91 98765 43210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
               </div>
             </div>
 
-            {selectedRole === ROLES.DOCTOR && (
-              <>
-                <div className="auth-field">
-                  <label htmlFor="reg-specialization">Medical Specialization</label>
-                  <div className="auth-input-wrap">
-                    <Stethoscope size={16} className="auth-input-icon" />
-                    <input
-                      id="reg-specialization"
-                      type="text"
-                      required
-                      className="auth-input"
-                      placeholder="e.g. Cardiology, Neurology, General Physician"
-                      value={specialization}
-                      onChange={(e) => setSpecialization(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div className="auth-field">
-                    <label htmlFor="reg-hospital">Hospital / Clinic</label>
-                    <input
-                      id="reg-hospital"
-                      type="text"
-                      className="auth-input"
-                      style={{ paddingLeft: '0.85rem' }}
-                      placeholder="e.g. Apollo Hospital"
-                      value={hospital}
-                      onChange={(e) => setHospital(e.target.value)}
-                    />
-                  </div>
-                  <div className="auth-field">
-                    <label htmlFor="reg-city">City</label>
-                    <input
-                      id="reg-city"
-                      type="text"
-                      className="auth-input"
-                      style={{ paddingLeft: '0.85rem' }}
-                      placeholder="e.g. Delhi, Mumbai"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="auth-field">
-                  <label htmlFor="reg-fee">Consultation Fee (₹)</label>
-                  <input
-                    id="reg-fee"
-                    type="number"
-                    className="auth-input"
-                    style={{ paddingLeft: '0.85rem' }}
-                    placeholder="800"
-                    value={fee}
-                    onChange={(e) => setFee(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-
-            {selectedRole === ROLES.PATIENT && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div className="auth-field">
-                  <label htmlFor="reg-age">Age (Optional)</label>
-                  <input
-                    id="reg-age"
-                    type="number"
-                    min="1"
-                    max="120"
-                    className="auth-input"
-                    style={{ paddingLeft: '0.85rem' }}
-                    placeholder="e.g. 28"
-                    value={age}
-                    onChange={(e) => setAge(e.target.value)}
-                  />
-                </div>
-                <div className="auth-field">
-                  <label htmlFor="reg-sex">Sex</label>
-                  <select
-                    id="reg-sex"
-                    className="auth-input"
-                    style={{ paddingLeft: '0.85rem' }}
-                    value={sex}
-                    onChange={(e) => setSex(e.target.value)}
-                  >
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
+            <div className="auth-grid-2">
+              <div className="auth-field">
+                <label htmlFor="reg-age">Age</label>
+                <input
+                  id="reg-age"
+                  type="number"
+                  min="1"
+                  max="120"
+                  className="auth-input"
+                  placeholder="e.g. 28"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                />
               </div>
-            )}
 
-            <button type="submit" className="auth-submit-btn" disabled={submitting}>
-              {submitting ? 'Creating Account...' : 'Complete Registration'}
+              <div className="auth-field">
+                <label htmlFor="reg-sex">Sex</label>
+                <select
+                  id="reg-sex"
+                  className="auth-input"
+                  value={sex}
+                  onChange={(e) => setSex(e.target.value)}
+                >
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn--primary auth-submit"
+              disabled={submitting}
+            >
               <UserCheck size={16} />
+              <span>{submitting ? 'Creating account...' : 'Create Patient Account'}</span>
             </button>
           </form>
         )}
-
-        <footer className="auth-footer">
-          <span>Protected by Healthcare Navigator Role-Based Authorization</span>
-        </footer>
       </div>
     </div>
   );

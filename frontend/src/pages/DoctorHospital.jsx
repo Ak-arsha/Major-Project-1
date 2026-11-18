@@ -465,9 +465,11 @@ export default function DoctorHospital() {
                       state: {
                         doctorId: d.doctor_id,
                         doctorName: d.doctor_name,
+                        specialization: d.doctor_type || d.specialization,
                         hospitalId: d.hospital_id,
                         hospitalName: d.hospital_name,
                         city: d.city,
+                        fees: d.fees,
                       },
                     })
                   }

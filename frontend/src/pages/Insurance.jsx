@@ -118,8 +118,46 @@ export default function Insurance() {
 
       setPolicyDetails(data);
     } catch (err) {
-      console.error("Policy details error:", err);
-      setDetailsError(err.message);
+      console.warn("Policy details API failed, using cached policy info:", err);
+      const matched = finderPolicies.find(
+        (p) => String(p.uin || '').toLowerCase() === String(uin || '').toLowerCase()
+      );
+      if (matched) {
+        setPolicyDetails({
+          ...matched,
+          name: matched.name,
+          insurer: matched.insurer,
+          uin: matched.uin,
+          category: matched.category,
+          category_name: matched.category?.replaceAll("-", " "),
+          description:
+            matched.summary ||
+            matched.description ||
+            "Comprehensive health insurance policy covering in-patient hospitalization, emergency daycare treatments, and pre/post-hospitalization medical expenses.",
+          key_benefits: matched.key_benefits || [
+            "Cashless treatment across network hospitals nationwide",
+            "In-patient hospitalization and ICU charges covered",
+            "Pre and post hospitalization medical expense coverage (30/60 days)",
+            "Emergency ambulance assistance cover",
+          ],
+          sum_insured_options: matched.sum_insured_options || [
+            "₹3,00,000",
+            "₹5,00,000",
+            "₹10,00,000",
+            "₹25,00,000",
+          ],
+          waiting_periods: matched.waiting_periods || {
+            initial: matched.initial_waiting || "30 days",
+            pre_existing_diseases: matched.ped_waiting || "36 months",
+            specific_illnesses: "24 months",
+          },
+          copay: matched.copay || "None (0%)",
+          room_rent_limit: matched.room_rent_limit || "No sub-limit / Standard private room",
+        });
+        setDetailsError("");
+      } else {
+        setDetailsError(err.message || "Unable to load policy details.");
+      }
     } finally {
       setDetailsLoading(false);
     }

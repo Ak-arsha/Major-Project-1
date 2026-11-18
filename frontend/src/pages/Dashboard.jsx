@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { ArrowRight, BookOpen, Activity, Stethoscope, CalendarCheck2, Heart, PhoneCall, Shield } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, BookOpen, Activity, Stethoscope, CalendarCheck2, Heart, PhoneCall } from 'lucide-react';
 import AgentMap from '../components/dashboard/AgentMap';
 import StatusPill from '../components/common/StatusPill';
-import SampleBadge from '../components/common/SampleBadge';
-import { AGENT_MODULES, MODULES } from '../config/modules';
-import { ACTIVITY, RAG_TOPICS } from '../data/sampleData';
+import { AGENT_MODULES } from '../config/modules';
+import { RAG_TOPICS } from '../data/sampleData';
 import { getAppointmentStats, getHealthStatus } from '../services/appointmentService';
-import { ROLES, useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
-  const { role, user, switchToRole } = useAuth();
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [health, setHealth] = useState(null);
 
@@ -30,44 +29,6 @@ export default function Dashboard() {
 
   return (
     <div className="page dashboard">
-      {/* Clinician viewing Patient Portal notice */}
-      {role === ROLES.DOCTOR && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '0.65rem',
-            padding: '0.75rem 1.25rem',
-            borderRadius: 'var(--r-md)',
-            background: '#ecfdf5',
-            border: '1px solid #a7f3d0',
-            marginBottom: '1rem',
-          }}
-        >
-          <span style={{ fontSize: '0.875rem', color: '#065f46' }}>
-            Previewing Patient Portal as <strong>{user?.name || 'Dr. Ananya Rao'}</strong> (Clinician).
-          </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              type="button"
-              className="btn btn--secondary btn--sm"
-              onClick={() => switchToRole && switchToRole(ROLES.PATIENT)}
-              style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem' }}
-            >
-              Switch to Patient Account
-            </button>
-            <Link
-              to="/doctor"
-              className="btn btn--primary btn--sm"
-              style={{ fontSize: '0.8rem', padding: '0.25rem 0.65rem', background: '#047857', border: 'none' }}
-            >
-              Return to Doctor OPD Console &rarr;
-            </Link>
-          </div>
-        </div>
-      )}
       {/* Patient Portal Welcome Banner */}
       <div
         style={{
@@ -86,8 +47,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           <Heart size={20} style={{ color: 'var(--teal-600)' }} />
           <span style={{ fontSize: '0.9rem', color: 'var(--navy-900)' }}>
-            Welcome back, <strong>{user?.name || 'Alex Sharma'}</strong> · Signed in as{' '}
-            <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{role || 'Patient'}</span>
+            Welcome back, <strong>{user?.name || 'Alex Sharma'}</strong>
             {' '}— Your personal healthcare, appointments, and medical knowledge dashboard
           </span>
         </div>
@@ -120,7 +80,7 @@ export default function Dashboard() {
           <p>
             Healthcare Navigator brings specialised AI agents together so you do not have to jump
             between disconnected services. Doctor &amp; Hospital search, Appointments, and the
-            Medical Knowledge Assistant are live; Triage and Insurance are next.
+            Medical Knowledge Assistant are live; Triage and Insurance are ready to explore.
           </p>
           <div className="hero__cta">
             <Link to="/appointments" className="btn btn--primary">
@@ -189,29 +149,6 @@ export default function Dashboard() {
           Merged dataset: {stats ? stats.merged_historical_records : 2904} historical outpatient records ·{' '}
           {stats ? stats.upcoming_bookings : 0} active patient bookings.
         </p>
-      </section>
-
-      <section className="section" aria-labelledby="activity-h">
-        <div className="section__head">
-          <h2 id="activity-h">Recent activity</h2>
-          <SampleBadge />
-        </div>
-        <ul className="activity">
-          {ACTIVITY.map((a) => {
-            const m = MODULES.find((x) => x.id === a.module);
-            const Icon = m.icon;
-            return (
-              <li key={a.id}>
-                <span className="activity__icon"><Icon size={17} aria-hidden="true" /></span>
-                <div>
-                  <p>{a.text}</p>
-                  <small>{m.label}</small>
-                </div>
-                <time>{a.time}</time>
-              </li>
-            );
-          })}
-        </ul>
       </section>
     </div>
   );

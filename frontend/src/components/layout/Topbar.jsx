@@ -10,13 +10,12 @@ import {
   Menu,
   Search,
   Sparkles,
-  Stethoscope,
   User,
   X,
 } from 'lucide-react';
 import { MODULES } from '../../config/modules';
 import { NOTIFICATIONS } from '../../data/sampleData';
-import { ROLES, useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   clearAllSearchHistory,
   loadSearchHistory,
@@ -36,17 +35,8 @@ const POPULAR_SEARCHES = [
 export default function Topbar({ onMenu }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { user, role, logout, loginAsDemo, switchToRole } = useAuth();
+  const { user, role, logout } = useAuth();
   const current = MODULES.find((m) => m.path === pathname) ?? MODULES[0];
-
-  const handleSwapToDoctor = () => {
-    if (switchToRole) {
-      switchToRole(ROLES.DOCTOR);
-    } else if (loginAsDemo) {
-      loginAsDemo(ROLES.DOCTOR);
-    }
-    navigate('/doctor');
-  };
 
   const [query, setQuery] = useState('');
   const [miss, setMiss] = useState(false);
@@ -244,28 +234,6 @@ export default function Topbar({ onMenu }) {
       </div>
 
       <div className="topbar__actions">
-        <button
-          type="button"
-          onClick={handleSwapToDoctor}
-          className="btn btn--ghost btn--sm"
-          style={{
-            fontSize: '0.8125rem',
-            padding: '0.35rem 0.75rem',
-            borderRadius: 'var(--r-full)',
-            border: '1px solid #a7f3d0',
-            background: '#ecfdf5',
-            color: '#047857',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-          title="Swap to Doctor OPD Console"
-        >
-          <Stethoscope size={14} /> Doctor View &rarr;
-        </button>
-
         <div className="popover-wrap" ref={bellRef}>
           <button
             className="icon-btn"
@@ -299,16 +267,16 @@ export default function Topbar({ onMenu }) {
             aria-expanded={profileOpen}
           >
             <span
-              className={`profile__avatar profile__avatar--${role || 'patient'}`}
+              className="profile__avatar profile__avatar--patient"
               aria-hidden="true"
             >
-              {user?.avatar || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'U')}
+              {user?.avatar || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'PT')}
             </span>
             <span className="profile__text">
               <strong>{user?.name || 'Authorized User'}</strong>
               <small>
-                <span className={`role-badge role-badge--${role || 'patient'}`}>
-                  {role || 'User'}
+                <span className="role-badge role-badge--patient">
+                  Patient
                 </span>
                 <ChevronDown size={12} />
               </small>
@@ -319,57 +287,18 @@ export default function Topbar({ onMenu }) {
             <div className="profile-menu" role="dialog" aria-label="Account details">
               <div className="profile-menu__user">
                 <span
-                  className={`profile__avatar profile__avatar--${role || 'patient'}`}
+                  className="profile__avatar profile__avatar--patient"
                   aria-hidden="true"
                 >
-                  {user?.avatar || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'U')}
+                  {user?.avatar || (user?.name ? user.name.slice(0, 2).toUpperCase() : 'PT')}
                 </span>
                 <div className="profile-menu__user-info">
                   <strong>{user?.name || 'Healthcare User'}</strong>
-                  <span>{user?.email || 'user@healthnavigator.ai'}</span>
+                  <span>{user?.email || 'patient@healthnavigator.ai'}</span>
                   <span style={{ fontSize: '0.7rem', color: 'var(--ink-faint)', marginTop: '2px' }}>
-                    {user?.headline || `${role} account`}
+                    {user?.headline || 'Patient Account'}
                   </span>
                 </div>
-              </div>
-
-              <div className="profile-menu__section-title">
-                <Sparkles size={11} style={{ marginRight: '4px', display: 'inline' }} />
-                Switch Evaluation Role
-              </div>
-
-              <div className="profile-menu__switchers">
-                <button
-                  type="button"
-                  className={`profile-menu__switch-btn ${role === ROLES.PATIENT ? 'profile-menu__switch-btn--active' : ''}`}
-                  onClick={() => {
-                    if (switchToRole) switchToRole(ROLES.PATIENT);
-                    else loginAsDemo(ROLES.PATIENT);
-                    setProfileOpen(false);
-                    navigate('/');
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <User size={14} /> Patient Account
-                  </span>
-                  {role === ROLES.PATIENT && <span style={{ fontSize: '0.7rem', color: 'var(--teal-600)' }}>Active</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`profile-menu__switch-btn ${role === ROLES.DOCTOR ? 'profile-menu__switch-btn--active' : ''}`}
-                  onClick={() => {
-                    if (switchToRole) switchToRole(ROLES.DOCTOR);
-                    else loginAsDemo(ROLES.DOCTOR);
-                    setProfileOpen(false);
-                    navigate('/doctor');
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Stethoscope size={14} /> Doctor Account
-                  </span>
-                  {role === ROLES.DOCTOR && <span style={{ fontSize: '0.7rem', color: 'var(--teal-600)' }}>Active</span>}
-                </button>
               </div>
 
               <button
